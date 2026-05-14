@@ -5,8 +5,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QProcess, QTimer
-from PySide6.QtGui import QAction, QColor, QPalette
+from PySide6.QtCore import Qt, QProcess, QTimer, QSize           # <-- добавлен QSize
+from PySide6.QtGui import QAction, QColor, QPalette, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QButtonGroup,
@@ -29,6 +29,8 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
     QMenu,
+    QStyle,
+    QComboBox,
 )
 
 
@@ -167,7 +169,7 @@ def newest_file(folder: Path) -> Path | None:
     if not folder.exists():
         return None
 
-    exts = {".mp4", ".mp3", ".m4a", ".webm", ".mkv"}
+    exts = {".mp4", ".mp3", ".m4a", ".webm", ".mkv", ".opus", ".ogg", ".flac", ".wav", ".aac"}
     files = [p for p in folder.iterdir() if p.is_file() and p.suffix.lower() in exts]
 
     if not files:
@@ -211,14 +213,14 @@ def open_path(path: Path) -> None:
 def apply_dark_palette(app: QApplication) -> None:
     palette = QPalette()
 
-    palette.setColor(QPalette.Window, QColor("#1E1E1E"))
-    palette.setColor(QPalette.WindowText, QColor("#F5F5F7"))
-    palette.setColor(QPalette.Base, QColor("#151515"))
-    palette.setColor(QPalette.AlternateBase, QColor("#242426"))
-    palette.setColor(QPalette.ToolTipBase, QColor("#2A2A2D"))
+    palette.setColor(QPalette.Window, QColor("#1A1A1A"))
+    palette.setColor(QPalette.WindowText, QColor("#F0F0F0"))
+    palette.setColor(QPalette.Base, QColor("#121212"))
+    palette.setColor(QPalette.AlternateBase, QColor("#1F1F1F"))
+    palette.setColor(QPalette.ToolTipBase, QColor("#2A2A2A"))
     palette.setColor(QPalette.ToolTipText, QColor("#FFFFFF"))
-    palette.setColor(QPalette.Text, QColor("#F5F5F7"))
-    palette.setColor(QPalette.Button, QColor("#303034"))
+    palette.setColor(QPalette.Text, QColor("#F0F0F0"))
+    palette.setColor(QPalette.Button, QColor("#2C2C2C"))
     palette.setColor(QPalette.ButtonText, QColor("#FFFFFF"))
     palette.setColor(QPalette.BrightText, QColor("#FFFFFF"))
     palette.setColor(QPalette.Link, QColor("#0A84FF"))
@@ -242,7 +244,8 @@ def make_scroll_page(page: QWidget) -> QScrollArea:
 class Logger:
     def __init__(self, settings: dict):
         self.enabled = bool(settings.get("logs", {}).get("enabled", True))
-        self.file = logs_dir(settings) / f"youwizard_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+        log_dir = logs_dir(settings)
+        self.file = log_dir / f"youwizard_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
 
         self.write("=== YouWizard started ===")
         self.write(f"Root: {ROOT}")
@@ -272,11 +275,15 @@ class Card(QFrame):
 
 
 class NavButton(QPushButton):
-    def __init__(self, text: str):
+    def __init__(self, text: str, icon: QIcon = None):
         super().__init__(text)
         self.setCheckable(True)
         self.setMinimumHeight(44)
         self.setCursor(Qt.PointingHandCursor)
+        if icon:
+            self.setIcon(icon)
+            size_val = self.style().pixelMetric(QStyle.PM_SmallIconSize) * 2
+            self.setIconSize(QSize(size_val, size_val))   # исправлено: передаём QSize
 
 
 class QualityButton(QRadioButton):
@@ -371,8 +378,8 @@ class DownloadPage(QWidget):
         self.selected_quality: int | None = None
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 22)
-        layout.setSpacing(12)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(16)
 
         title = QLabel("Скачать")
         title.setObjectName("PageTitle")
@@ -416,7 +423,7 @@ class DownloadPage(QWidget):
         quality_layout.setContentsMargins(16, 16, 16, 16)
         quality_layout.setSpacing(10)
 
-        quality_title = QLabel("Качество")
+        quality_title = QLabel("Качество видео")
         quality_title.setObjectName("SectionTitle")
 
         self.quality_group = QButtonGroup(self)
@@ -441,7 +448,7 @@ class DownloadPage(QWidget):
         audio_layout.setContentsMargins(16, 16, 16, 16)
         audio_layout.setSpacing(8)
 
-        audio_title = QLabel("Формат аудио")
+        audio_title = QLabel("Формат и качество аудио")
         audio_title.setObjectName("SectionTitle")
 
         self.mp3_radio = QRadioButton("MP3")
@@ -456,9 +463,22 @@ class DownloadPage(QWidget):
         else:
             self.mp3_radio.setChecked(True)
 
+        audio_quality_layout = QHBoxLayout()
+        audio_quality_layout.setSpacing(8)
+        audio_quality_label = QLabel("Битрейт:")
+        self.audio_quality_combo = QComboBox()
+        self.audio_quality_combo.addItems(["128K", "192K", "256K", "320K"])
+        current_quality = self.window.settings["audio"].get("quality", "192K")
+        idx = self.audio_quality_combo.findText(current_quality)
+        if idx >= 0:
+            self.audio_quality_combo.setCurrentIndex(idx)
+        audio_quality_layout.addWidget(audio_quality_label)
+        audio_quality_layout.addWidget(self.audio_quality_combo, 1)
+
         audio_layout.addWidget(audio_title)
         audio_layout.addWidget(self.mp3_radio)
         audio_layout.addWidget(self.m4a_radio)
+        audio_layout.addLayout(audio_quality_layout)
 
         folder_card = Card()
         folder_layout = QVBoxLayout(folder_card)
@@ -653,6 +673,7 @@ class DownloadPage(QWidget):
     def audio_command(self, url: str, folder: Path) -> list[str]:
         audio_format = "m4a" if self.m4a_radio.isChecked() else "mp3"
         output = str(folder / "%(title).200s.%(ext)s")
+        audio_quality = self.audio_quality_combo.currentText()
 
         return [
             str(YTDLP),
@@ -664,7 +685,7 @@ class DownloadPage(QWidget):
             "--audio-format",
             audio_format,
             "--audio-quality",
-            self.window.settings["audio"].get("quality", "192K"),
+            audio_quality,
             "-o",
             output,
             url
@@ -691,6 +712,7 @@ class DownloadPage(QWidget):
         self.window.settings["downloads"]["download_folder"] = self.folder.text().strip() or "downloads"
         self.window.settings["downloads"]["default_mode"] = "video" if self.video_radio.isChecked() else "audio"
         self.window.settings["audio"]["format"] = "m4a" if self.m4a_radio.isChecked() else "mp3"
+        self.window.settings["audio"]["quality"] = self.audio_quality_combo.currentText()
         save_settings(self.window.settings)
 
         if self.video_radio.isChecked():
@@ -720,10 +742,11 @@ class DownloadPage(QWidget):
         self.process.start()
 
     def stop_download(self) -> None:
-        if self.process:
+        if self.process and self.process.state() != QProcess.NotRunning:
             self.process.kill()
-            self.status.setText("Загрузка остановлена.")
+            self.status.setText("Загрузка остановлена. Ожидание завершения процесса...")
             self.window.logger.write("Download stopped by user.")
+            self.stop_btn.setEnabled(False)
 
     def on_output(self) -> None:
         if not self.process:
@@ -789,8 +812,8 @@ class HistoryPage(QWidget):
         self.window = window
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 22)
-        layout.setSpacing(12)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(16)
 
         title = QLabel("Загружено")
         title.setObjectName("PageTitle")
@@ -827,8 +850,8 @@ class SettingsPage(QWidget):
         self.window = window
 
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(24, 22, 24, 22)
-        layout.setSpacing(12)
+        layout.setContentsMargins(28, 24, 28, 24)
+        layout.setSpacing(16)
 
         title = QLabel("Настройки")
         title.setObjectName("PageTitle")
@@ -864,6 +887,15 @@ class SettingsPage(QWidget):
             bool(self.window.settings["downloads"].get("show_high_res_options", False))
         )
 
+        audio_quality_label = QLabel("Качество аудио по умолчанию")
+        audio_quality_label.setObjectName("SectionTitle")
+        self.audio_quality_combo = QComboBox()
+        self.audio_quality_combo.addItems(["128K", "192K", "256K", "320K"])
+        current_quality = self.window.settings["audio"].get("quality", "192K")
+        idx = self.audio_quality_combo.findText(current_quality)
+        if idx >= 0:
+            self.audio_quality_combo.setCurrentIndex(idx)
+
         save = QPushButton("Сохранить")
         save.setObjectName("Primary")
         save.setMinimumHeight(48)
@@ -884,6 +916,8 @@ class SettingsPage(QWidget):
         card_layout.addWidget(folder_label)
         card_layout.addLayout(folder_row)
         card_layout.addWidget(self.high_res)
+        card_layout.addWidget(audio_quality_label)
+        card_layout.addWidget(self.audio_quality_combo)
         card_layout.addWidget(save)
         card_layout.addWidget(open_settings)
         card_layout.addWidget(open_logs)
@@ -910,10 +944,12 @@ class SettingsPage(QWidget):
     def save(self) -> None:
         self.window.settings["downloads"]["download_folder"] = self.folder.text().strip() or "downloads"
         self.window.settings["downloads"]["show_high_res_options"] = self.high_res.isChecked()
+        self.window.settings["audio"]["quality"] = self.audio_quality_combo.currentText()
         save_settings(self.window.settings)
 
         self.window.download_page.rebuild_quality_buttons()
         self.window.download_page.folder.setText(self.window.download_folder())
+        self.window.download_page.audio_quality_combo.setCurrentText(self.audio_quality_combo.currentText())
         self.update_info()
 
         QMessageBox.information(self, "Сохранено", "Настройки сохранены.")
@@ -940,7 +976,12 @@ class MainWindow(QMainWindow):
         self.resize(1040, 680)
         self.setMinimumSize(820, 560)
 
+        # Установка иконок
+        icon = self.style().standardIcon(QStyle.SP_MediaPlay)
+        self.setWindowIcon(icon)
+
         self.tray = QSystemTrayIcon(self)
+        self.tray.setIcon(icon)
         self.tray.setToolTip(APP_NAME)
         self.setup_tray()
 
@@ -998,9 +1039,9 @@ class MainWindow(QMainWindow):
 
         self.nav_buttons = []
 
-        self.add_nav(side_layout, "Скачать", 0)
-        self.add_nav(side_layout, "Загружено", 1)
-        self.add_nav(side_layout, "Настройки", 2)
+        self.add_nav(side_layout, "Скачать", 0, self.style().standardIcon(QStyle.SP_ArrowDown))
+        self.add_nav(side_layout, "Загружено", 1, self.style().standardIcon(QStyle.SP_DirOpenIcon))
+        self.add_nav(side_layout, "Настройки", 2, self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
 
         side_layout.addStretch()
 
@@ -1023,8 +1064,8 @@ class MainWindow(QMainWindow):
     def download_folder(self) -> str:
         return self.settings["downloads"].get("download_folder", "downloads")
 
-    def add_nav(self, layout: QVBoxLayout, text: str, index: int) -> None:
-        btn = NavButton(text)
+    def add_nav(self, layout: QVBoxLayout, text: str, index: int, icon: QIcon = None) -> None:
+        btn = NavButton(text, icon)
         btn.clicked.connect(lambda checked=False, i=index: self.switch(i))
         layout.addWidget(btn)
         self.nav_buttons.append(btn)
@@ -1091,42 +1132,46 @@ class MainWindow(QMainWindow):
         self.setStyleSheet("""
             * {
                 outline: 0;
-                border-radius: 0px;
             }
 
             QWidget {
-                background: #1E1E1E;
-                color: #F5F5F7;
-                font-family: "Segoe UI";
+                background: #1A1A1A;
+                color: #F0F0F0;
+                font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
                 font-size: 14px;
             }
 
             #Background {
-                background: #1E1E1E;
+                background: #1A1A1A;
             }
 
             #Shell {
-                background: #202020;
+                background: #232323;
                 border: 1px solid #3A3A3C;
+                border-radius: 10px;
             }
 
             #Sidebar {
-                background: #181818;
+                background: #1C1C1C;
                 border-right: 1px solid #333333;
+                border-top-left-radius: 10px;
+                border-bottom-left-radius: 10px;
             }
 
             #Stack {
-                background: #202020;
+                background: #232323;
                 border: none;
+                border-top-right-radius: 10px;
+                border-bottom-right-radius: 10px;
             }
 
             #PageScroll {
-                background: #202020;
+                background: transparent;
                 border: none;
             }
 
             #PageScroll QWidget {
-                background: #202020;
+                background: transparent;
             }
 
             #Logo {
@@ -1148,6 +1193,7 @@ class MainWindow(QMainWindow):
                 color: white;
                 font-size: 15px;
                 font-weight: 700;
+                margin-bottom: 4px;
             }
 
             #Muted {
@@ -1156,35 +1202,38 @@ class MainWindow(QMainWindow):
             }
 
             #Card {
-                background: #2A2A2D;
+                background: #2C2C2E;
                 border: 1px solid #3C3C40;
+                border-radius: 10px;
             }
 
             #RecentRow {
-                background: #242426;
+                background: #2A2A2C;
                 border: 1px solid #3A3A3D;
+                border-radius: 8px;
             }
 
             #RecentText {
                 background: transparent;
-                color: #F5F5F7;
+                color: #F0F0F0;
             }
 
             QPushButton {
-                background: #303034;
+                background: #38383A;
                 color: white;
                 border: 1px solid #4A4A50;
+                border-radius: 8px;
                 padding: 8px 16px;
                 font-weight: 600;
             }
 
             QPushButton:hover {
-                background: #3A3A40;
+                background: #48484C;
                 border-color: #5A5A62;
             }
 
             QPushButton:pressed {
-                background: #252529;
+                background: #2C2C2E;
             }
 
             QPushButton:checked {
@@ -1194,9 +1243,9 @@ class MainWindow(QMainWindow):
             }
 
             QPushButton:disabled {
-                background: #26262A;
+                background: #2A2A2D;
                 color: #777780;
-                border-color: #333338;
+                border-color: #3A3A3D;
             }
 
             #Primary {
@@ -1210,9 +1259,10 @@ class MainWindow(QMainWindow):
             }
 
             QLineEdit {
-                background: #151515;
+                background: #1C1C1E;
                 color: white;
                 border: 1px solid #4A4A50;
+                border-radius: 8px;
                 padding: 9px 12px;
                 selection-background-color: #0A84FF;
             }
@@ -1228,19 +1278,21 @@ class MainWindow(QMainWindow):
             QRadioButton,
             QCheckBox {
                 background: transparent;
-                color: #F5F5F7;
+                color: #F0F0F0;
                 spacing: 10px;
                 padding: 7px;
+                border-radius: 6px;
             }
 
             QRadioButton:hover,
             QCheckBox:hover {
-                background: #303034;
+                background: #333336;
             }
 
             QRadioButton#QualityButton {
-                background: #151515;
+                background: #1C1C1E;
                 border: 1px solid #4A4A50;
+                border-radius: 8px;
                 padding: 8px 12px;
                 min-width: 82px;
                 font-weight: 600;
@@ -1248,7 +1300,7 @@ class MainWindow(QMainWindow):
 
             QRadioButton#QualityButton:hover {
                 border-color: #62626A;
-                background: #222226;
+                background: #2A2A2D;
             }
 
             QRadioButton#QualityButton:checked {
@@ -1266,7 +1318,8 @@ class MainWindow(QMainWindow):
                 width: 18px;
                 height: 18px;
                 border: 1px solid #686870;
-                background: #151515;
+                border-radius: 9px;
+                background: #1C1C1E;
             }
 
             QRadioButton::indicator:checked {
@@ -1278,7 +1331,8 @@ class MainWindow(QMainWindow):
                 width: 18px;
                 height: 18px;
                 border: 1px solid #686870;
-                background: #151515;
+                border-radius: 4px;
+                background: #1C1C1E;
             }
 
             QCheckBox::indicator:checked {
@@ -1287,24 +1341,51 @@ class MainWindow(QMainWindow):
             }
 
             QProgressBar {
-                background: #151515;
+                background: #1C1C1E;
                 color: white;
                 border: 1px solid #4A4A50;
+                border-radius: 8px;
                 text-align: center;
+                font-weight: bold;
             }
 
             QProgressBar::chunk {
-                background: #0A84FF;
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                            stop:0 #0A84FF, stop:1 #2B94FF);
+                border-radius: 7px;
+            }
+
+            QComboBox {
+                background: #1C1C1E;
+                color: white;
+                border: 1px solid #4A4A50;
+                border-radius: 8px;
+                padding: 8px 12px;
+                min-height: 20px;
+            }
+
+            QComboBox:hover {
+                border-color: #62626A;
+            }
+
+            QComboBox QAbstractItemView {
+                background: #2C2C2E;
+                border: 1px solid #4A4A50;
+                selection-background-color: #0A84FF;
+                color: white;
             }
 
             QMenu {
-                background: #2A2A2D;
+                background: #2C2C2E;
                 color: white;
                 border: 1px solid #4A4A50;
+                border-radius: 8px;
+                padding: 4px;
             }
 
             QMenu::item {
                 padding: 8px 22px;
+                border-radius: 4px;
             }
 
             QMenu::item:selected {
@@ -1312,7 +1393,7 @@ class MainWindow(QMainWindow):
             }
 
             QMessageBox {
-                background: #1E1E1E;
+                background: #1A1A1A;
                 color: white;
             }
 
@@ -1322,20 +1403,22 @@ class MainWindow(QMainWindow):
             }
 
             QFileDialog {
-                background: #1E1E1E;
+                background: #1A1A1A;
                 color: white;
             }
 
             QScrollBar:vertical {
-                background: #202020;
+                background: #232323;
                 width: 12px;
-                margin: 0px;
+                margin: 2px;
                 border: none;
+                border-radius: 6px;
             }
 
             QScrollBar::handle:vertical {
                 background: #4A4A50;
                 min-height: 28px;
+                border-radius: 6px;
             }
 
             QScrollBar::handle:vertical:hover {
@@ -1354,15 +1437,17 @@ class MainWindow(QMainWindow):
             }
 
             QScrollBar:horizontal {
-                background: #202020;
+                background: #232323;
                 height: 12px;
-                margin: 0px;
+                margin: 2px;
                 border: none;
+                border-radius: 6px;
             }
 
             QScrollBar::handle:horizontal {
                 background: #4A4A50;
                 min-width: 28px;
+                border-radius: 6px;
             }
 
             QScrollBar::handle:horizontal:hover {
