@@ -5,9 +5,9 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import Qt, QProcess, QTimer, QSize           # <-- добавлен QSize
-from PySide6.QtGui import QAction, QColor, QPalette, QIcon
-from PySide6.QtWidgets import (
+from PyQt5.QtCore import Qt, QProcess, QTimer, QSize, pyqtSignal
+from PyQt5.QtGui import QAction, QColor, QPalette, QIcon
+from PyQt5.QtWidgets import (
     QApplication,
     QButtonGroup,
     QCheckBox,
@@ -36,6 +36,136 @@ from PySide6.QtWidgets import (
 
 APP_NAME = "YouWizard"
 
+# Переводы интерфейса
+TRANSLATIONS = {
+    "ru": {
+        "app_title": "YouWizard",
+        "logo": "YouWizard",
+        "subtitle": "Media downloader",
+        "nav_download": "Скачать",
+        "nav_history": "Загружено",
+        "nav_settings": "Настройки",
+        "exit": "Выход",
+        "download_page_title": "Скачать",
+        "download_page_subtitle": "Видео скачивается через yt-dlp. MP4 собирается через ffmpeg без лишнего перекодирования.",
+        "url_placeholder": "Вставь ссылку на видео",
+        "mode_title": "Что скачать",
+        "mode_video": "Видео",
+        "mode_audio": "Только аудио",
+        "quality_title": "Качество видео",
+        "quality_hint": "2K / 4K / 8K скрыты по умолчанию. Включаются в настройках.",
+        "audio_title": "Формат и качество аудио",
+        "audio_bitrate": "Битрейт:",
+        "folder_title": "Папка загрузок",
+        "choose_folder": "Выбрать",
+        "download_btn": "Скачать",
+        "stop_btn": "Остановить",
+        "status_ready": "Готов к работе.",
+        "recent_title": "Последние 5 загруженных файлов",
+        "recent_empty": "Пока ничего не скачано.",
+        "open_btn": "Открыть",
+        "file_not_found_title": "Файл не найден",
+        "file_not_found_msg": "Файл удалён или перемещён.",
+        "history_title": "История загрузок",
+        "open_folder_btn": "Открыть папку загрузок",
+        "settings_title": "Настройки",
+        "settings_general": "Основные настройки",
+        "close_to_tray": "Сворачивать в трей при закрытии",
+        "show_high_res": "Показывать варианты 2K/4K/8K",
+        "default_mode": "Режим по умолчанию",
+        "default_mode_video": "Видео",
+        "default_mode_audio": "Аудио",
+        "language": "Язык интерфейса",
+        "language_ru": "Русский",
+        "language_en": "English",
+        "logs_title": "Настройки логов",
+        "enable_logs": "Включить логирование",
+        "cleanup_interval": "Интервал очистки (мин):",
+        "keep_logs": "Хранить последних логов:",
+        "save_btn": "Сохранить",
+        "saved_title": "Сохранено",
+        "saved_msg": "Настройки сохранены. Перезапустите приложение для применения некоторых изменений.",
+        "tools_info": "Информация о компонентах",
+        "tray_open": "Открыть YouWizard",
+        "tray_logs": "Открыть логи",
+        "tray_exit": "Выход",
+        "tray_msg_title": "YouWizard",
+        "tray_msg_text": "Программа продолжает работать в фоне.",
+        "error_tools_title": "Ошибка",
+        "error_tools_msg": "Не найдены необходимые компоненты (yt-dlp, ffmpeg).",
+        "error_url_title": "Ошибка",
+        "error_url_msg": "Введите URL видео.",
+        "downloading": "Загрузка...",
+        "stopped": "Загрузка остановлена.",
+        "finished": "Загрузка завершена.",
+        "error_download_title": "Ошибка загрузки",
+        "no_files_yet": "Файлов пока нет.",
+    },
+    "en": {
+        "app_title": "YouWizard",
+        "logo": "YouWizard",
+        "subtitle": "Media downloader",
+        "nav_download": "Download",
+        "nav_history": "Downloads",
+        "nav_settings": "Settings",
+        "exit": "Exit",
+        "download_page_title": "Download",
+        "download_page_subtitle": "Videos are downloaded via yt-dlp. MP4 is assembled via ffmpeg without unnecessary re-encoding.",
+        "url_placeholder": "Paste video URL",
+        "mode_title": "What to download",
+        "mode_video": "Video",
+        "mode_audio": "Audio only",
+        "quality_title": "Video quality",
+        "quality_hint": "2K / 4K / 8K are hidden by default. Enable in settings.",
+        "audio_title": "Audio format and quality",
+        "audio_bitrate": "Bitrate:",
+        "folder_title": "Download folder",
+        "choose_folder": "Choose",
+        "download_btn": "Download",
+        "stop_btn": "Stop",
+        "status_ready": "Ready.",
+        "recent_title": "Last 5 downloaded files",
+        "recent_empty": "Nothing downloaded yet.",
+        "open_btn": "Open",
+        "file_not_found_title": "File not found",
+        "file_not_found_msg": "The file has been deleted or moved.",
+        "history_title": "Download history",
+        "open_folder_btn": "Open download folder",
+        "settings_title": "Settings",
+        "settings_general": "General settings",
+        "close_to_tray": "Minimize to tray on close",
+        "show_high_res": "Show 2K/4K/8K options",
+        "default_mode": "Default mode",
+        "default_mode_video": "Video",
+        "default_mode_audio": "Audio",
+        "language": "Interface language",
+        "language_ru": "Русский",
+        "language_en": "English",
+        "logs_title": "Log settings",
+        "enable_logs": "Enable logging",
+        "cleanup_interval": "Cleanup interval (min):",
+        "keep_logs": "Keep last logs:",
+        "save_btn": "Save",
+        "saved_title": "Saved",
+        "saved_msg": "Settings saved. Restart application for some changes to take effect.",
+        "tools_info": "Components info",
+        "tray_open": "Open YouWizard",
+        "tray_logs": "Open logs",
+        "tray_exit": "Exit",
+        "tray_msg_title": "YouWizard",
+        "tray_msg_text": "Application continues to run in background.",
+        "error_tools_title": "Error",
+        "error_tools_msg": "Required components not found (yt-dlp, ffmpeg).",
+        "error_url_title": "Error",
+        "error_url_msg": "Please enter a video URL.",
+        "downloading": "Downloading...",
+        "stopped": "Download stopped.",
+        "finished": "Download completed.",
+        "error_download_title": "Download error",
+        "no_files_yet": "No files yet.",
+    }
+}
+
 
 def root_dir() -> Path:
     return Path(__file__).resolve().parent.parent
@@ -55,7 +185,8 @@ DEFAULT_SETTINGS = {
     "_warning_ru": "ВНИМАНИЕ: если вы не знаете, за что отвечает параметр, не изменяйте этот файл вручную.",
     "_warning_en": "WARNING: if you do not know what a setting does, do not edit this file manually.",
     "app": {
-        "close_to_tray": True
+        "close_to_tray": True,
+        "language": "ru"
     },
     "downloads": {
         "download_folder": "downloads",
@@ -327,9 +458,10 @@ class RecentList(Card):
         self.clear_items()
 
         recent = self.window.settings.get("downloads", {}).get("recent_downloads", [])[:5]
+        t = self.window.get_text()
 
         if not recent:
-            empty = QLabel("Пока ничего не скачано.")
+            empty = QLabel(t["recent_empty"])
             empty.setObjectName("Muted")
             empty.setWordWrap(True)
             self.items.addWidget(empty)
@@ -343,7 +475,7 @@ class RecentList(Card):
             row_layout.setContentsMargins(12, 8, 12, 8)
             row_layout.setSpacing(10)
 
-            name = item.get("name", "Файл")
+            name = item.get("name", "File")
             date = item.get("date", "")
             path = item.get("path", "")
 
@@ -351,7 +483,7 @@ class RecentList(Card):
             text.setObjectName("RecentText")
             text.setWordWrap(True)
 
-            open_btn = QPushButton("Открыть")
+            open_btn = QPushButton(t["open_btn"])
             open_btn.setFixedWidth(105)
             open_btn.clicked.connect(lambda checked=False, p=path: self.open_file(p))
 
@@ -362,11 +494,12 @@ class RecentList(Card):
 
     def open_file(self, path: str) -> None:
         p = Path(path)
+        t = self.window.get_text()
 
         if p.exists():
             open_path(p)
         else:
-            QMessageBox.warning(self, "Файл не найден", "Файл удалён или перемещён.")
+            QMessageBox.warning(self, t["file_not_found_title"], t["file_not_found_msg"])
 
 
 class DownloadPage(QWidget):
@@ -381,15 +514,17 @@ class DownloadPage(QWidget):
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(16)
 
-        title = QLabel("Скачать")
+        t = self.window.get_text()
+
+        title = QLabel(t["download_page_title"])
         title.setObjectName("PageTitle")
 
-        subtitle = QLabel("Видео скачивается через yt-dlp. MP4 собирается через ffmpeg без лишнего перекодирования.")
+        subtitle = QLabel(t["download_page_subtitle"])
         subtitle.setObjectName("Muted")
         subtitle.setWordWrap(True)
 
         self.url = QLineEdit()
-        self.url.setPlaceholderText("Вставь ссылку на видео")
+        self.url.setPlaceholderText(t["url_placeholder"])
         self.url.setMinimumHeight(46)
 
         self.mode_card = Card()
@@ -397,11 +532,11 @@ class DownloadPage(QWidget):
         mode_layout.setContentsMargins(16, 16, 16, 16)
         mode_layout.setSpacing(8)
 
-        mode_title = QLabel("Что скачать")
+        mode_title = QLabel(t["mode_title"])
         mode_title.setObjectName("SectionTitle")
 
-        self.video_radio = QRadioButton("Видео")
-        self.audio_radio = QRadioButton("Только аудио")
+        self.video_radio = QRadioButton(t["mode_video"])
+        self.audio_radio = QRadioButton(t["mode_audio"])
 
         self.mode_group = QButtonGroup(self)
         self.mode_group.addButton(self.video_radio)
@@ -423,7 +558,7 @@ class DownloadPage(QWidget):
         quality_layout.setContentsMargins(16, 16, 16, 16)
         quality_layout.setSpacing(10)
 
-        quality_title = QLabel("Качество видео")
+        quality_title = QLabel(t["quality_title"])
         quality_title.setObjectName("SectionTitle")
 
         self.quality_group = QButtonGroup(self)
@@ -433,7 +568,7 @@ class DownloadPage(QWidget):
         self.quality_grid.setHorizontalSpacing(8)
         self.quality_grid.setVerticalSpacing(8)
 
-        quality_hint = QLabel("2K / 4K / 8K скрыты по умолчанию. Включаются в настройках.")
+        quality_hint = QLabel(t["quality_hint"])
         quality_hint.setObjectName("Muted")
         quality_hint.setWordWrap(True)
 
@@ -448,7 +583,7 @@ class DownloadPage(QWidget):
         audio_layout.setContentsMargins(16, 16, 16, 16)
         audio_layout.setSpacing(8)
 
-        audio_title = QLabel("Формат и качество аудио")
+        audio_title = QLabel(t["audio_title"])
         audio_title.setObjectName("SectionTitle")
 
         self.mp3_radio = QRadioButton("MP3")
@@ -465,7 +600,7 @@ class DownloadPage(QWidget):
 
         audio_quality_layout = QHBoxLayout()
         audio_quality_layout.setSpacing(8)
-        audio_quality_label = QLabel("Битрейт:")
+        audio_quality_label = QLabel(t["audio_bitrate"])
         self.audio_quality_combo = QComboBox()
         self.audio_quality_combo.addItems(["128K", "192K", "256K", "320K"])
         current_quality = self.window.settings["audio"].get("quality", "192K")
@@ -485,7 +620,7 @@ class DownloadPage(QWidget):
         folder_layout.setContentsMargins(16, 16, 16, 16)
         folder_layout.setSpacing(10)
 
-        folder_title = QLabel("Папка загрузок")
+        folder_title = QLabel(t["folder_title"])
         folder_title.setObjectName("SectionTitle")
 
         folder_row = QHBoxLayout()
@@ -495,7 +630,7 @@ class DownloadPage(QWidget):
         self.folder.setMinimumHeight(46)
         self.folder.setText(self.window.download_folder())
 
-        choose = QPushButton("Выбрать")
+        choose = QPushButton(t["choose_folder"])
         choose.setMinimumHeight(46)
         choose.clicked.connect(self.choose_folder)
 
@@ -508,12 +643,12 @@ class DownloadPage(QWidget):
         buttons = QHBoxLayout()
         buttons.setSpacing(10)
 
-        self.download_btn = QPushButton("Скачать")
+        self.download_btn = QPushButton(t["download_btn"])
         self.download_btn.setObjectName("Primary")
         self.download_btn.setMinimumHeight(48)
         self.download_btn.clicked.connect(self.start_download)
 
-        self.stop_btn = QPushButton("Остановить")
+        self.stop_btn = QPushButton(t["stop_btn"])
         self.stop_btn.setMinimumHeight(48)
         self.stop_btn.setEnabled(False)
         self.stop_btn.clicked.connect(self.stop_download)
@@ -526,11 +661,11 @@ class DownloadPage(QWidget):
         self.progress.setValue(0)
         self.progress.setTextVisible(True)
 
-        self.status = QLabel("Готов к работе.")
+        self.status = QLabel(t["status_ready"])
         self.status.setObjectName("Muted")
         self.status.setWordWrap(True)
 
-        self.recent = RecentList(self.window, "Последние 5 загруженных файлов")
+        self.recent = RecentList(self.window, t["recent_title"])
 
         layout.addWidget(title)
         layout.addWidget(subtitle)
@@ -693,13 +828,15 @@ class DownloadPage(QWidget):
 
     def start_download(self) -> None:
         if self.process is not None:
-            QMessageBox.warning(self, "Загрузка уже идёт", "Сначала останови текущую загрузку.")
+            t = self.window.get_text()
+            QMessageBox.warning(self, t["error_download_title"], "Сначала останови текущую загрузку." if self.window.get_lang() == "ru" else "Stop current download first.")
             return
 
         url = self.url.text().strip()
+        t = self.window.get_text()
 
         if not url:
-            QMessageBox.warning(self, "Нет ссылки", "Вставь ссылку.")
+            QMessageBox.warning(self, t["error_url_title"], t["error_url_msg"])
             return
 
         if not self.check_tools():
@@ -735,7 +872,7 @@ class DownloadPage(QWidget):
         self.process.errorOccurred.connect(self.on_error)
 
         self.progress.setValue(0)
-        self.status.setText("Загрузка запущена. Подробности пишутся в TXT-лог.")
+        self.status.setText(t["downloading"])
         self.download_btn.setEnabled(False)
         self.stop_btn.setEnabled(True)
 
@@ -744,7 +881,8 @@ class DownloadPage(QWidget):
     def stop_download(self) -> None:
         if self.process and self.process.state() != QProcess.NotRunning:
             self.process.kill()
-            self.status.setText("Загрузка остановлена. Ожидание завершения процесса...")
+            t = self.window.get_text()
+            self.status.setText(t["stopped"])
             self.window.logger.write("Download stopped by user.")
             self.stop_btn.setEnabled(False)
 
@@ -758,6 +896,7 @@ class DownloadPage(QWidget):
             return
 
         self.window.logger.block(data)
+        t = self.window.get_text()
 
         for line in data.splitlines():
             match = re.search(r"\[download\]\s+(\d+(?:\.\d+)?)%", line)
@@ -766,18 +905,19 @@ class DownloadPage(QWidget):
                 percent = int(float(match.group(1)))
                 percent = max(0, min(100, percent))
                 self.progress.setValue(percent)
-                self.status.setText(f"Загрузка: {percent}%")
+                self.status.setText(f"{t['downloading']} {percent}%")
 
             if "[Merger]" in line:
-                self.status.setText("Объединение видео и аудио...")
+                self.status.setText("Объединение видео и аудио..." if self.window.get_lang() == "ru" else "Merging video and audio...")
 
             if "[ExtractAudio]" in line:
-                self.status.setText("Извлечение аудио...")
+                self.status.setText("Извлечение аудио..." if self.window.get_lang() == "ru" else "Extracting audio...")
 
     def on_finished(self, exit_code: int, exit_status) -> None:
+        t = self.window.get_text()
         if exit_code == 0:
             self.progress.setValue(100)
-            self.status.setText("Готово. Файл скачан.")
+            self.status.setText(t["finished"])
 
             if self.current_folder:
                 file = newest_file(self.current_folder)
@@ -786,11 +926,11 @@ class DownloadPage(QWidget):
                     add_recent(self.window.settings, file)
                     self.window.refresh_recent()
 
-            self.window.tray_msg("YouWizard", "Загрузка завершена.")
+            self.window.tray_msg(t["app_title"], t["finished"])
             self.window.logger.write("=== Download finished ===")
         else:
-            self.status.setText(f"Ошибка загрузки. Код: {exit_code}. Подробности в TXT-логе.")
-            self.window.tray_msg("YouWizard", "Ошибка загрузки.")
+            self.status.setText(f"{t['error_download_title']}. Код: {exit_code}." if self.window.get_lang() == "ru" else f"Download error. Code: {exit_code}.")
+            self.window.tray_msg(t["app_title"], t["error_download_title"])
             self.window.logger.write(f"=== Download failed: {exit_code} ===")
 
         self.process = None
@@ -798,7 +938,8 @@ class DownloadPage(QWidget):
         self.stop_btn.setEnabled(False)
 
     def on_error(self) -> None:
-        self.status.setText("Ошибка запуска yt-dlp.")
+        t = self.window.get_text()
+        self.status.setText("Ошибка запуска yt-dlp." if self.window.get_lang() == "ru" else "yt-dlp launch error.")
         self.window.logger.write("QProcess error.")
 
         self.process = None
@@ -815,16 +956,18 @@ class HistoryPage(QWidget):
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(16)
 
-        title = QLabel("Загружено")
+        t = self.window.get_text()
+
+        title = QLabel(t["history_title"])
         title.setObjectName("PageTitle")
 
-        subtitle = QLabel("Последние 5 скачанных файлов.")
+        subtitle = QLabel(t["recent_title"])
         subtitle.setObjectName("Muted")
         subtitle.setWordWrap(True)
 
-        self.recent = RecentList(self.window, "История скачивания")
+        self.recent = RecentList(self.window, t["recent_title"])
 
-        open_folder = QPushButton("Открыть папку загрузок")
+        open_folder = QPushButton(t["open_folder_btn"])
         open_folder.setObjectName("Primary")
         open_folder.setMinimumHeight(48)
         open_folder.clicked.connect(self.open_folder)
@@ -853,10 +996,12 @@ class SettingsPage(QWidget):
         layout.setContentsMargins(28, 24, 28, 24)
         layout.setSpacing(16)
 
-        title = QLabel("Настройки")
+        t = self.window.get_text()
+
+        title = QLabel(t["settings_title"])
         title.setObjectName("PageTitle")
 
-        subtitle = QLabel("Основные параметры приложения.")
+        subtitle = QLabel(t["settings_general"])
         subtitle.setObjectName("Muted")
         subtitle.setWordWrap(True)
 
@@ -865,7 +1010,7 @@ class SettingsPage(QWidget):
         card_layout.setContentsMargins(16, 16, 16, 16)
         card_layout.setSpacing(12)
 
-        folder_label = QLabel("Папка загрузок")
+        folder_label = QLabel(t["folder_title"])
         folder_label.setObjectName("SectionTitle")
 
         folder_row = QHBoxLayout()
@@ -875,19 +1020,31 @@ class SettingsPage(QWidget):
         self.folder.setMinimumHeight(46)
         self.folder.setText(self.window.download_folder())
 
-        choose = QPushButton("Выбрать")
+        choose = QPushButton(t["choose_folder"])
         choose.setMinimumHeight(46)
         choose.clicked.connect(self.choose_folder)
 
         folder_row.addWidget(self.folder, 1)
         folder_row.addWidget(choose)
 
-        self.high_res = QCheckBox("Показывать 2K / 4K / 8K")
+        self.high_res = QCheckBox(t["show_high_res"])
         self.high_res.setChecked(
             bool(self.window.settings["downloads"].get("show_high_res_options", False))
         )
 
-        audio_quality_label = QLabel("Качество аудио по умолчанию")
+        # Выбор языка
+        lang_label = QLabel(t["language"])
+        lang_label.setObjectName("SectionTitle")
+        self.lang_combo = QComboBox()
+        self.lang_combo.addItem(t["language_ru"], "ru")
+        self.lang_combo.addItem(t["language_en"], "en")
+        current_lang = self.window.settings["app"].get("language", "ru")
+        for i in range(self.lang_combo.count()):
+            if self.lang_combo.itemData(i) == current_lang:
+                self.lang_combo.setCurrentIndex(i)
+                break
+
+        audio_quality_label = QLabel(t["audio_title"])
         audio_quality_label.setObjectName("SectionTitle")
         self.audio_quality_combo = QComboBox()
         self.audio_quality_combo.addItems(["128K", "192K", "256K", "320K"])
@@ -896,16 +1053,16 @@ class SettingsPage(QWidget):
         if idx >= 0:
             self.audio_quality_combo.setCurrentIndex(idx)
 
-        save = QPushButton("Сохранить")
+        save = QPushButton(t["save_btn"])
         save.setObjectName("Primary")
         save.setMinimumHeight(48)
         save.clicked.connect(self.save)
 
-        open_settings = QPushButton("Открыть settings.json")
+        open_settings = QPushButton("Open settings.json")
         open_settings.setMinimumHeight(44)
         open_settings.clicked.connect(lambda: open_path(SETTINGS_FILE))
 
-        open_logs = QPushButton("Открыть логи")
+        open_logs = QPushButton("Open logs" if self.window.get_lang() == "en" else "Открыть логи")
         open_logs.setMinimumHeight(44)
         open_logs.clicked.connect(lambda: open_path(logs_dir(self.window.settings)))
 
@@ -916,6 +1073,8 @@ class SettingsPage(QWidget):
         card_layout.addWidget(folder_label)
         card_layout.addLayout(folder_row)
         card_layout.addWidget(self.high_res)
+        card_layout.addWidget(lang_label)
+        card_layout.addWidget(self.lang_combo)
         card_layout.addWidget(audio_quality_label)
         card_layout.addWidget(self.audio_quality_combo)
         card_layout.addWidget(save)
@@ -931,9 +1090,10 @@ class SettingsPage(QWidget):
         self.update_info()
 
     def choose_folder(self) -> None:
+        t = self.window.get_text()
         folder = QFileDialog.getExistingDirectory(
             self,
-            "Выбрать папку загрузок",
+            t["folder_title"],
             str(app_path(self.folder.text())),
             QFileDialog.Option.DontUseNativeDialog
         )
@@ -945,6 +1105,9 @@ class SettingsPage(QWidget):
         self.window.settings["downloads"]["download_folder"] = self.folder.text().strip() or "downloads"
         self.window.settings["downloads"]["show_high_res_options"] = self.high_res.isChecked()
         self.window.settings["audio"]["quality"] = self.audio_quality_combo.currentText()
+        # Сохранение выбранного языка
+        lang_index = self.lang_combo.currentIndex()
+        self.window.settings["app"]["language"] = self.lang_combo.itemData(lang_index)
         save_settings(self.window.settings)
 
         self.window.download_page.rebuild_quality_buttons()
@@ -952,14 +1115,16 @@ class SettingsPage(QWidget):
         self.window.download_page.audio_quality_combo.setCurrentText(self.audio_quality_combo.currentText())
         self.update_info()
 
-        QMessageBox.information(self, "Сохранено", "Настройки сохранены.")
+        t = self.window.get_text()
+        QMessageBox.information(self, t["saved_title"], t["saved_msg"])
 
     def update_info(self) -> None:
+        lang = self.window.get_lang()
         self.info.setText(
-            f"yt-dlp.exe: {'найден' if YTDLP.exists() else 'не найден'}\n"
-            f"ffmpeg.exe: {'найден' if FFMPEG.exists() else 'не найден'}\n"
-            f"ffprobe.exe: {'найден' if FFPROBE.exists() else 'не найден'}\n"
-            f"Логи: {logs_dir(self.window.settings)}"
+            f"yt-dlp.exe: {'найден' if YTDLP.exists() else 'not found'}\n"
+            f"ffmpeg.exe: {'найден' if FFMPEG.exists() else 'not found'}\n"
+            f"ffprobe.exe: {'найден' if FFPROBE.exists() else 'not found'}\n"
+            f"{'Логи' if lang == 'ru' else 'Logs'}: {logs_dir(self.window.settings)}"
         )
 
 
@@ -972,7 +1137,9 @@ class MainWindow(QMainWindow):
 
         cleanup_logs(self.settings)
 
-        self.setWindowTitle(APP_NAME)
+        t = self.get_text()
+
+        self.setWindowTitle(t["app_title"])
         self.resize(1040, 680)
         self.setMinimumSize(820, 560)
 
@@ -982,7 +1149,7 @@ class MainWindow(QMainWindow):
 
         self.tray = QSystemTrayIcon(self)
         self.tray.setIcon(icon)
-        self.tray.setToolTip(APP_NAME)
+        self.tray.setToolTip(t["app_title"])
         self.setup_tray()
 
         self.cleanup_timer = QTimer(self)
@@ -1016,10 +1183,10 @@ class MainWindow(QMainWindow):
         side_layout.setContentsMargins(14, 18, 14, 18)
         side_layout.setSpacing(10)
 
-        logo = QLabel("YouWizard")
+        logo = QLabel(t["logo"])
         logo.setObjectName("Logo")
 
-        desc = QLabel("Media downloader")
+        desc = QLabel(t["subtitle"])
         desc.setObjectName("Muted")
 
         side_layout.addWidget(logo)
@@ -1039,13 +1206,13 @@ class MainWindow(QMainWindow):
 
         self.nav_buttons = []
 
-        self.add_nav(side_layout, "Скачать", 0, self.style().standardIcon(QStyle.SP_ArrowDown))
-        self.add_nav(side_layout, "Загружено", 1, self.style().standardIcon(QStyle.SP_DirOpenIcon))
-        self.add_nav(side_layout, "Настройки", 2, self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
+        self.add_nav(side_layout, t["nav_download"], 0, self.style().standardIcon(QStyle.SP_ArrowDown))
+        self.add_nav(side_layout, t["nav_history"], 1, self.style().standardIcon(QStyle.SP_DirOpenIcon))
+        self.add_nav(side_layout, t["nav_settings"], 2, self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
 
         side_layout.addStretch()
 
-        exit_btn = QPushButton("Выход")
+        exit_btn = QPushButton(t["exit"])
         exit_btn.setMinimumHeight(44)
         exit_btn.clicked.connect(QApplication.quit)
         side_layout.addWidget(exit_btn)
@@ -1060,6 +1227,13 @@ class MainWindow(QMainWindow):
 
         self.apply_style()
         self.logger.write("Application ready.")
+
+    def get_lang(self) -> str:
+        return self.settings["app"].get("language", "ru")
+
+    def get_text(self) -> dict:
+        lang = self.get_lang()
+        return TRANSLATIONS.get(lang, TRANSLATIONS["ru"])
 
     def download_folder(self) -> str:
         return self.settings["downloads"].get("download_folder", "downloads")
@@ -1088,14 +1262,15 @@ class MainWindow(QMainWindow):
 
     def setup_tray(self) -> None:
         menu = QMenu()
+        t = self.get_text()
 
-        open_action = QAction("Открыть YouWizard", self)
+        open_action = QAction(t["tray_open"], self)
         open_action.triggered.connect(self.show_window)
 
-        logs_action = QAction("Открыть логи", self)
+        logs_action = QAction(t["tray_logs"], self)
         logs_action.triggered.connect(lambda: open_path(logs_dir(self.settings)))
 
-        exit_action = QAction("Выход", self)
+        exit_action = QAction(t["tray_exit"], self)
         exit_action.triggered.connect(QApplication.quit)
 
         menu.addAction(open_action)
@@ -1120,10 +1295,11 @@ class MainWindow(QMainWindow):
         self.logger.write("Log cleanup completed.")
 
     def closeEvent(self, event) -> None:
+        t = self.get_text()
         if self.settings["app"].get("close_to_tray", True):
             event.ignore()
             self.hide()
-            self.tray_msg(APP_NAME, "Программа продолжает работать в фоне.")
+            self.tray_msg(t["tray_msg_title"], t["tray_msg_text"])
             self.logger.write("Window hidden to tray.")
         else:
             event.accept()
