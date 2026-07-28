@@ -2,11 +2,14 @@ import json
 import os
 import re
 import sys
+import subprocess
+import urllib.request
+import shutil
 from datetime import datetime
 from pathlib import Path
 
-from PyQt5.QtCore import Qt, QProcess, QTimer, QSize, pyqtSignal
-from PyQt5.QtGui import QColor, QPalette, QIcon
+from PyQt5.QtCore import Qt, QProcess, QTimer, QSize, pyqtSignal, QThread
+from PyQt5.QtGui import QColor, QPalette, QIcon, QFont
 from PyQt5.QtWidgets import (
     QAction,
     QApplication,
@@ -37,139 +40,161 @@ from PyQt5.QtWidgets import (
 
 APP_NAME = "YouWizard"
 
+# URLs для загрузки инструментов
+YTDLP_URL = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe"
+FFMPEG_URL = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+
 # Переводы интерфейса
 TRANSLATIONS = {
     "ru": {
         "app_title": "YouWizard",
-        "logo": "YouWizard",
-        "subtitle": "Media downloader",
-        "nav_download": "Скачать",
-        "nav_history": "Загружено",
-        "nav_settings": "Настройки",
-        "exit": "Выход",
-        "download_page_title": "Скачать",
-        "download_page_subtitle": "Видео скачивается через yt-dlp. MP4 собирается через ffmpeg без лишнего перекодирования.",
-        "url_placeholder": "Вставь ссылку на видео",
+        "logo": "🎬 YouWizard",
+        "subtitle": "Media Downloader",
+        "nav_download": "📥 Скачать",
+        "nav_history": "📁 Загрузки",
+        "nav_settings": "⚙️ Настройки",
+        "exit": "🚪 Выход",
+        "download_page_title": "Скачать медиа",
+        "download_page_subtitle": "Видео загружается через yt-dlp. MP4 обрабатывается через ffmpeg без перекодирования.",
+        "url_placeholder": "Вставьте ссылку на видео (YouTube, Vimeo, TikTok...)",
         "mode_title": "Что скачать",
-        "mode_video": "Видео",
-        "mode_audio": "Только аудио",
+        "mode_video": "🎬 Видео + Аудио",
+        "mode_audio": "🎵 Только аудио",
         "quality_title": "Качество видео",
-        "quality_hint": "2K / 4K / 8K скрыты по умолчанию. Включаются в настройках.",
+        "quality_hint": "2K / 4K / 8K скрыты. Включите в настройках.",
         "audio_title": "Формат и качество аудио",
         "audio_bitrate": "Битрейт:",
         "folder_title": "Папка загрузок",
-        "choose_folder": "Выбрать",
-        "download_btn": "Скачать",
-        "stop_btn": "Остановить",
-        "status_ready": "Готов к работе.",
-        "recent_title": "Последние 5 загруженных файлов",
-        "recent_empty": "Пока ничего не скачано.",
-        "open_btn": "Открыть",
+        "choose_folder": "📂 Выбрать",
+        "download_btn": "▶️ Скачать",
+        "stop_btn": "⏹️ Остановить",
+        "status_ready": "✅ Готов к работе",
+        "status_downloading": "⏳ Загрузка...",
+        "status_finished": "✅ Завершено",
+        "status_error": "❌ Ошибка",
+        "recent_title": "🕐 Последние 5 загрузок",
+        "recent_empty": "📭 Пока пусто",
+        "open_btn": "📂 Открыть",
         "file_not_found_title": "Файл не найден",
-        "file_not_found_msg": "Файл удалён или перемещён.",
-        "history_title": "История загрузок",
-        "open_folder_btn": "Открыть папку загрузок",
-        "settings_title": "Настройки",
-        "settings_general": "Основные настройки",
+        "file_not_found_msg": "Файл был удалён или перемещён.",
+        "history_title": "📜 История загрузок",
+        "open_folder_btn": "📂 Открыть папку",
+        "settings_title": "⚙️ Настройки",
+        "settings_general": "Основные",
         "close_to_tray": "Сворачивать в трей при закрытии",
-        "show_high_res": "Показывать варианты 2K/4K/8K",
+        "show_high_res": "Показывать 2K/4K/8K",
         "default_mode": "Режим по умолчанию",
         "default_mode_video": "Видео",
         "default_mode_audio": "Аудио",
         "language": "Язык интерфейса",
         "language_ru": "Русский",
         "language_en": "English",
-        "logs_title": "Настройки логов",
+        "logs_title": "Логи",
         "enable_logs": "Включить логирование",
-        "cleanup_interval": "Интервал очистки (мин):",
-        "keep_logs": "Хранить последних логов:",
-        "save_btn": "Сохранить",
+        "cleanup_interval": "Очистка каждые (мин):",
+        "keep_logs": "Хранить логов:",
+        "save_btn": "💾 Сохранить",
         "saved_title": "Сохранено",
-        "saved_msg": "Настройки сохранены. Перезапустите приложение для применения некоторых изменений.",
+        "saved_msg": "Настройки сохранены. Перезапустите приложение.",
         "tools_info": "Информация о компонентах",
         "tray_open": "Открыть YouWizard",
         "tray_logs": "Открыть логи",
         "tray_exit": "Выход",
         "tray_msg_title": "YouWizard",
-        "tray_msg_text": "Программа продолжает работать в фоне.",
+        "tray_msg_text": "Работает в фоне...",
         "error_tools_title": "Ошибка",
-        "error_tools_msg": "Не найдены необходимые компоненты (yt-dlp, ffmpeg).",
+        "error_tools_msg": "Компоненты не найдены. Загружаю...",
         "error_url_title": "Ошибка",
         "error_url_msg": "Введите URL видео.",
         "downloading": "Загрузка...",
-        "stopped": "Загрузка остановлена.",
-        "finished": "Загрузка завершена.",
+        "stopped": "Остановлено.",
+        "finished": "Готово!",
         "error_download_title": "Ошибка загрузки",
         "no_files_yet": "Файлов пока нет.",
+        "installing_tools": "📦 Установка компонентов...",
+        "downloading_ytdlp": "⬇️ Загрузка yt-dlp...",
+        "downloading_ffmpeg": "⬇️ Загрузка ffmpeg...",
+        "install_complete": "✅ Компоненты установлены!",
+        "first_run_title": "Первый запуск",
+        "first_run_msg": "Приложение загружает необходимые компоненты. Это займёт несколько минут.",
     },
     "en": {
         "app_title": "YouWizard",
-        "logo": "YouWizard",
-        "subtitle": "Media downloader",
-        "nav_download": "Download",
-        "nav_history": "Downloads",
-        "nav_settings": "Settings",
-        "exit": "Exit",
-        "download_page_title": "Download",
-        "download_page_subtitle": "Videos are downloaded via yt-dlp. MP4 is assembled via ffmpeg without unnecessary re-encoding.",
-        "url_placeholder": "Paste video URL",
+        "logo": "🎬 YouWizard",
+        "subtitle": "Media Downloader",
+        "nav_download": "📥 Download",
+        "nav_history": "📁 Downloads",
+        "nav_settings": "⚙️ Settings",
+        "exit": "🚪 Exit",
+        "download_page_title": "Download Media",
+        "download_page_subtitle": "Videos downloaded via yt-dlp. MP4 processed via ffmpeg without re-encoding.",
+        "url_placeholder": "Paste video URL (YouTube, Vimeo, TikTok...)",
         "mode_title": "What to download",
-        "mode_video": "Video",
-        "mode_audio": "Audio only",
-        "quality_title": "Video quality",
-        "quality_hint": "2K / 4K / 8K are hidden by default. Enable in settings.",
-        "audio_title": "Audio format and quality",
+        "mode_video": "🎬 Video + Audio",
+        "mode_audio": "🎵 Audio Only",
+        "quality_title": "Video Quality",
+        "quality_hint": "2K / 4K / 8K hidden. Enable in settings.",
+        "audio_title": "Audio Format & Quality",
         "audio_bitrate": "Bitrate:",
-        "folder_title": "Download folder",
-        "choose_folder": "Choose",
-        "download_btn": "Download",
-        "stop_btn": "Stop",
-        "status_ready": "Ready.",
-        "recent_title": "Last 5 downloaded files",
-        "recent_empty": "Nothing downloaded yet.",
-        "open_btn": "Open",
-        "file_not_found_title": "File not found",
-        "file_not_found_msg": "The file has been deleted or moved.",
-        "history_title": "Download history",
-        "open_folder_btn": "Open download folder",
-        "settings_title": "Settings",
-        "settings_general": "General settings",
+        "folder_title": "Download Folder",
+        "choose_folder": "📂 Choose",
+        "download_btn": "▶️ Download",
+        "stop_btn": "⏹️ Stop",
+        "status_ready": "✅ Ready",
+        "status_downloading": "⏳ Downloading...",
+        "status_finished": "✅ Complete",
+        "status_error": "❌ Error",
+        "recent_title": "🕐 Last 5 Downloads",
+        "recent_empty": "📭 Empty",
+        "open_btn": "📂 Open",
+        "file_not_found_title": "File Not Found",
+        "file_not_found_msg": "File was deleted or moved.",
+        "history_title": "📜 Download History",
+        "open_folder_btn": "📂 Open Folder",
+        "settings_title": "⚙️ Settings",
+        "settings_general": "General",
         "close_to_tray": "Minimize to tray on close",
-        "show_high_res": "Show 2K/4K/8K options",
-        "default_mode": "Default mode",
+        "show_high_res": "Show 2K/4K/8K",
+        "default_mode": "Default Mode",
         "default_mode_video": "Video",
         "default_mode_audio": "Audio",
-        "language": "Interface language",
+        "language": "Interface Language",
         "language_ru": "Русский",
         "language_en": "English",
-        "logs_title": "Log settings",
+        "logs_title": "Logs",
         "enable_logs": "Enable logging",
-        "cleanup_interval": "Cleanup interval (min):",
-        "keep_logs": "Keep last logs:",
-        "save_btn": "Save",
+        "cleanup_interval": "Cleanup every (min):",
+        "keep_logs": "Keep logs:",
+        "save_btn": "💾 Save",
         "saved_title": "Saved",
-        "saved_msg": "Settings saved. Restart application for some changes to take effect.",
-        "tools_info": "Components info",
+        "saved_msg": "Settings saved. Restart application.",
+        "tools_info": "Components Info",
         "tray_open": "Open YouWizard",
         "tray_logs": "Open logs",
         "tray_exit": "Exit",
         "tray_msg_title": "YouWizard",
-        "tray_msg_text": "Application continues to run in background.",
+        "tray_msg_text": "Running in background...",
         "error_tools_title": "Error",
-        "error_tools_msg": "Required components not found (yt-dlp, ffmpeg).",
+        "error_tools_msg": "Components not found. Downloading...",
         "error_url_title": "Error",
-        "error_url_msg": "Please enter a video URL.",
+        "error_url_msg": "Enter video URL.",
         "downloading": "Downloading...",
-        "stopped": "Download stopped.",
-        "finished": "Download completed.",
-        "error_download_title": "Download error",
+        "stopped": "Stopped.",
+        "finished": "Done!",
+        "error_download_title": "Download Error",
         "no_files_yet": "No files yet.",
+        "installing_tools": "📦 Installing components...",
+        "downloading_ytdlp": "⬇️ Downloading yt-dlp...",
+        "downloading_ffmpeg": "⬇️ Downloading ffmpeg...",
+        "install_complete": "✅ Components installed!",
+        "first_run_title": "First Run",
+        "first_run_msg": "Application is downloading required components. This may take a few minutes.",
     }
 }
 
 
 def root_dir() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return Path(__file__).resolve().parent
 
 
 ROOT = root_dir()
@@ -187,7 +212,8 @@ DEFAULT_SETTINGS = {
     "_warning_en": "WARNING: if you do not know what a setting does, do not edit this file manually.",
     "app": {
         "close_to_tray": True,
-        "language": "ru"
+        "language": "ru",
+        "first_run": True
     },
     "downloads": {
         "download_folder": "downloads",
@@ -204,6 +230,10 @@ DEFAULT_SETTINGS = {
         "folder": "settings/logs",
         "cleanup_interval_minutes": 60,
         "keep_last_logs": 20
+    },
+    "tools": {
+        "ytdlp_installed": False,
+        "ffmpeg_installed": False
     }
 }
 
@@ -251,6 +281,79 @@ def load_settings() -> dict:
 
         save_settings(DEFAULT_SETTINGS)
         return json.loads(json.dumps(DEFAULT_SETTINGS))
+
+
+class ToolsInstaller(QThread):
+    """Поток для загрузки и установки инструментов"""
+    progress_signal = pyqtSignal(str)
+    finished_signal = pyqtSignal(bool)
+    
+    def __init__(self):
+        super().__init__()
+        self.bin_dir = BIN
+        
+    def run(self):
+        try:
+            self.bin_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Загрузка yt-dlp
+            self.progress_signal.emit("downloading_ytdlp")
+            ytdlp_path = self.bin_dir / "yt-dlp.exe"
+            urllib.request.urlretrieve(YTDLP_URL, str(ytdlp_path))
+            
+            # Загрузка ffmpeg (zip архив)
+            self.progress_signal.emit("downloading_ffmpeg")
+            import zipfile
+            import tempfile
+            
+            zip_path = self.bin_dir / "ffmpeg.zip"
+            urllib.request.urlretrieve(FFMPEG_URL, str(zip_path))
+            
+            # Распаковка ffmpeg
+            with zipfile.ZipFile(str(zip_path), 'r') as zip_ref:
+                # Находим папку с бинарниками (обычно внутри bin/)
+                zip_ref.extractall(str(self.bin_dir))
+            
+            # Удаляем zip
+            zip_path.unlink()
+            
+            # Перемещаем exe файлы из подпапки в bin
+            extracted_dirs = [d for d in self.bin_dir.iterdir() if d.is_dir() and d.name.startswith('ffmpeg')]
+            if extracted_dirs:
+                ffmpeg_dir = extracted_dirs[0]
+                bin_subdir = ffmpeg_dir / 'bin'
+                if bin_subdir.exists():
+                    for exe_file in bin_subdir.glob('*.exe'):
+                        dest = self.bin_dir / exe_file.name
+                        if dest.exists():
+                            dest.unlink()
+                        exe_file.rename(dest)
+                
+                # Удаляем папку с исходными файлами
+                shutil.rmtree(ffmpeg_dir)
+            
+            self.finished_signal.emit(True)
+            
+        except Exception as e:
+            print(f"Error installing tools: {e}")
+            self.finished_signal.emit(False)
+
+
+def check_tools_installed() -> tuple[bool, bool]:
+    """Проверяет, установлены ли инструменты"""
+    ytdlp_installed = YTDLP.exists()
+    ffmpeg_installed = FFMPEG.exists()
+    return ytdlp_installed, ffmpeg_installed
+
+
+def install_tools_if_needed(settings: dict) -> bool:
+    """Устанавливает инструменты если их нет или первый запуск"""
+    first_run = settings.get("app", {}).get("first_run", True)
+    ytdlp_installed, ffmpeg_installed = check_tools_installed()
+    
+    if first_run or not ytdlp_installed or not ffmpeg_installed:
+        return True  # Нужно установить
+    return False  # Всё установлено
 
 
 def app_path(text: str) -> Path:
@@ -343,23 +446,273 @@ def open_path(path: Path) -> None:
 
 
 def apply_dark_palette(app: QApplication) -> None:
+    """Применяет полностью тёмную тему с современными цветами"""
     palette = QPalette()
-
-    palette.setColor(QPalette.Window, QColor("#1A1A1A"))
-    palette.setColor(QPalette.WindowText, QColor("#F0F0F0"))
-    palette.setColor(QPalette.Base, QColor("#121212"))
-    palette.setColor(QPalette.AlternateBase, QColor("#1F1F1F"))
-    palette.setColor(QPalette.ToolTipBase, QColor("#2A2A2A"))
-    palette.setColor(QPalette.ToolTipText, QColor("#FFFFFF"))
-    palette.setColor(QPalette.Text, QColor("#F0F0F0"))
-    palette.setColor(QPalette.Button, QColor("#2C2C2C"))
-    palette.setColor(QPalette.ButtonText, QColor("#FFFFFF"))
+    
+    # Основные цвета тёмной темы
+    palette.setColor(QPalette.Window, QColor("#121212"))
+    palette.setColor(QPalette.WindowText, QColor("#E0E0E0"))
+    palette.setColor(QPalette.Base, QColor("#1E1E1E"))
+    palette.setColor(QPalette.AlternateBase, QColor("#252525"))
+    palette.setColor(QPalette.ToolTipBase, QColor("#1E1E1E"))
+    palette.setColor(QPalette.ToolTipText, QColor("#E0E0E0"))
+    palette.setColor(QPalette.Text, QColor("#E0E0E0"))
+    palette.setColor(QPalette.Button, QColor("#2D2D2D"))
+    palette.setColor(QPalette.ButtonText, QColor("#E0E0E0"))
     palette.setColor(QPalette.BrightText, QColor("#FFFFFF"))
-    palette.setColor(QPalette.Link, QColor("#0A84FF"))
-    palette.setColor(QPalette.Highlight, QColor("#0A84FF"))
-    palette.setColor(QPalette.HighlightedText, QColor("#FFFFFF"))
-
+    palette.setColor(QPalette.Link, QColor("#64B5F6"))
+    palette.setColor(QPalette.Light, QColor("#3D3D3D"))
+    palette.setColor(QPalette.Midlight, QColor("#323232"))
+    palette.setColor(QPalette.Dark, QColor("#1A1A1A"))
+    palette.setColor(QPalette.Mid, QColor("#2A2A2A"))
+    palette.setColor(QPalette.Shadow, QColor("#0A0A0A"))
+    palette.setColor(QPalette.Highlight, QColor("#BB86FC"))
+    palette.setColor(QPalette.HighlightedText, QColor("#000000"))
+    
     app.setPalette(palette)
+    
+    # Применяем стилизацию через stylesheet для более современного вида
+    app.setStyleSheet("""
+        QMainWindow {
+            background-color: #121212;
+        }
+        
+        QWidget {
+            background-color: #121212;
+            color: #E0E0E0;
+            font-family: 'Segoe UI', Arial, sans-serif;
+        }
+        
+        QLabel#AppLogo {
+            font-size: 32px;
+            font-weight: bold;
+            color: #BB86FC;
+            padding: 10px;
+        }
+        
+        QLabel#AppSubtitle {
+            font-size: 14px;
+            color: #A0A0A0;
+            padding-bottom: 20px;
+        }
+        
+        QLabel#SectionTitle {
+            font-size: 16px;
+            font-weight: bold;
+            color: #BB86FC;
+            padding: 5px;
+        }
+        
+        QLabel#Muted {
+            color: #757575;
+            font-style: italic;
+        }
+        
+        QPushButton {
+            background-color: #2D2D2D;
+            border: 1px solid #3D3D3D;
+            border-radius: 8px;
+            padding: 10px 20px;
+            color: #E0E0E0;
+            font-weight: bold;
+        }
+        
+        QPushButton:hover {
+            background-color: #3D3D3D;
+            border-color: #BB86FC;
+        }
+        
+        QPushButton:pressed {
+            background-color: #BB86FC;
+            color: #000000;
+        }
+        
+        QPushButton#PrimaryButton {
+            background-color: #BB86FC;
+            color: #000000;
+            border: none;
+        }
+        
+        QPushButton#PrimaryButton:hover {
+            background-color: #9965F4;
+        }
+        
+        QPushButton#NavButton {
+            background-color: transparent;
+            border: none;
+            border-radius: 8px;
+            text-align: left;
+            padding: 12px 16px;
+            font-size: 14px;
+        }
+        
+        QPushButton#NavButton:hover {
+            background-color: #1E1E1E;
+        }
+        
+        QPushButton#NavButton:checked {
+            background-color: #2D2D2D;
+            border-left: 3px solid #BB86FC;
+        }
+        
+        QLineEdit {
+            background-color: #1E1E1E;
+            border: 1px solid #3D3D3D;
+            border-radius: 8px;
+            padding: 12px;
+            color: #E0E0E0;
+            selection-background-color: #BB86FC;
+            selection-color: #000000;
+        }
+        
+        QLineEdit:focus {
+            border-color: #BB86FC;
+        }
+        
+        QRadioButton {
+            spacing: 10px;
+        }
+        
+        QRadioButton::indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 10px;
+            border: 2px solid #3D3D3D;
+            background-color: #1E1E1E;
+        }
+        
+        QRadioButton::indicator:checked {
+            background-color: #BB86FC;
+            border-color: #BB86FC;
+        }
+        
+        QCheckBox {
+            spacing: 10px;
+        }
+        
+        QCheckBox::indicator {
+            width: 18px;
+            height: 18px;
+            border-radius: 4px;
+            border: 2px solid #3D3D3D;
+            background-color: #1E1E1E;
+        }
+        
+        QCheckBox::indicator:checked {
+            background-color: #BB86FC;
+            border-color: #BB86FC;
+        }
+        
+        QComboBox {
+            background-color: #1E1E1E;
+            border: 1px solid #3D3D3D;
+            border-radius: 8px;
+            padding: 10px;
+            color: #E0E0E0;
+        }
+        
+        QComboBox:hover {
+            border-color: #BB86FC;
+        }
+        
+        QComboBox::drop-down {
+            border: none;
+            width: 30px;
+        }
+        
+        QComboBox QAbstractItemView {
+            background-color: #1E1E1E;
+            border: 1px solid #3D3D3D;
+            selection-background-color: #BB86FC;
+            selection-color: #000000;
+        }
+        
+        QProgressBar {
+            background-color: #1E1E1E;
+            border: none;
+            border-radius: 8px;
+            height: 20px;
+            text-align: center;
+        }
+        
+        QProgressBar::chunk {
+            background-color: #BB86FC;
+            border-radius: 8px;
+        }
+        
+        QScrollArea {
+            border: none;
+            background-color: #121212;
+        }
+        
+        QScrollArea#PageScroll {
+            background-color: #121212;
+        }
+        
+        QScrollBar:vertical {
+            background-color: #121212;
+            width: 12px;
+            border-radius: 6px;
+        }
+        
+        QScrollBar::handle:vertical {
+            background-color: #3D3D3D;
+            border-radius: 6px;
+            min-height: 30px;
+        }
+        
+        QScrollBar::handle:vertical:hover {
+            background-color: #4D4D4D;
+        }
+        
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+            height: 0px;
+        }
+        
+        QFrame#Card {
+            background-color: #1E1E1E;
+            border: 1px solid #2D2D2D;
+            border-radius: 12px;
+        }
+        
+        QFrame#RecentRow {
+            background-color: #252525;
+            border-radius: 8px;
+        }
+        
+        QLabel#RecentText {
+            color: #E0E0E0;
+        }
+        
+        QMenu {
+            background-color: #1E1E1E;
+            border: 1px solid #3D3D3D;
+            border-radius: 8px;
+            padding: 8px;
+        }
+        
+        QMenu::item {
+            padding: 8px 16px;
+            border-radius: 4px;
+        }
+        
+        QMenu::item:selected {
+            background-color: #BB86FC;
+            color: #000000;
+        }
+        
+        QMessageBox {
+            background-color: #1E1E1E;
+        }
+        
+        QMessageBox QLabel {
+            color: #E0E0E0;
+        }
+        
+        QMessageBox QPushButton {
+            min-width: 80px;
+        }
+    """)
 
 
 def make_scroll_page(page: QWidget) -> QScrollArea:
@@ -1644,14 +1997,67 @@ class MainWindow(QMainWindow):
         """)
 
 
+class FirstRunDialog(QMessageBox):
+    """Диалог первого запуска с установкой инструментов"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setIcon(QMessageBox.Information)
+        self.setWindowTitle("Первый запуск / First Run")
+        self.setText("📦 Установка компонентов...\n\nПриложение загрузит необходимые инструменты (yt-dlp, ffmpeg).\nЭто займёт несколько минут.")
+        self.setStandardButtons(QMessageBox.NoButton)
+        
+        self.progress = QProgressBar()
+        self.progress.setRange(0, 0)  # Бесконечная анимация
+        self.layout().addWidget(self.progress)
+
+
 def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setStyle("Fusion")
     apply_dark_palette(app)
 
-    window = MainWindow()
-    window.show()
+    # Загружаем настройки
+    settings = load_settings()
+    
+    # Проверяем, нужна ли установка инструментов
+    first_run = settings.get("app", {}).get("first_run", True)
+    ytdlp_installed, ffmpeg_installed = check_tools_installed()
+    
+    if first_run or not ytdlp_installed or not ffmpeg_installed:
+        # Показываем диалог установки
+        install_dialog = FirstRunDialog()
+        install_dialog.show()
+        
+        # Запускаем установку в отдельном потоке
+        installer = ToolsInstaller()
+        installer.progress_signal.connect(lambda msg: print(f"Installing: {msg}"))
+        
+        def on_install_finished(success):
+            install_dialog.close()
+            if success:
+                # Обновляем настройки
+                settings["tools"]["ytdlp_installed"] = True
+                settings["tools"]["ffmpeg_installed"] = True
+                settings["app"]["first_run"] = False
+                save_settings(settings)
+                
+                # Показываем сообщение об успехе
+                QMessageBox.information(None, "✅ Готово!", 
+                    "Компоненты успешно установлены!\n\nComponents installed successfully!")
+            else:
+                QMessageBox.critical(None, "❌ Ошибка", 
+                    "Не удалось установить компоненты.\nПопробуйте вручную загрузить yt-dlp и ffmpeg.\n\nFailed to install components.")
+            # Запускаем основное окно
+            window = MainWindow()
+            window.show()
+        
+        installer.finished_signal.connect(on_install_finished)
+        installer.start()
+    else:
+        # Инструменты уже установлены, запускаем приложение
+        window = MainWindow()
+        window.show()
 
     sys.exit(app.exec())
 
