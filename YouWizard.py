@@ -6,8 +6,9 @@ from datetime import datetime
 from pathlib import Path
 
 from PyQt5.QtCore import Qt, QProcess, QTimer, QSize, pyqtSignal
-from PyQt5.QtGui import QAction, QColor, QPalette, QIcon
+from PyQt5.QtGui import QColor, QPalette, QIcon
 from PyQt5.QtWidgets import (
+    QAction,
     QApplication,
     QButtonGroup,
     QCheckBox,
