@@ -20,7 +20,7 @@ try:
     from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                  QHBoxLayout, QLineEdit, QPushButton, QLabel, 
                                  QComboBox, QProgressBar, QMessageBox, QFileDialog,
-                                 QDialog, QFrame)
+                                 QDialog, QFrame, QRadioButton, QButtonGroup)
     from PyQt6.QtCore import Qt, QThread, pyqtSignal
     from PyQt6.QtGui import QFont
 except ImportError:
@@ -47,7 +47,14 @@ TRANSLATIONS = {
         'status_error': 'Error',
         'first_run_title': 'Setup',
         'first_run_msg': 'Downloading essential tools...',
-        'select_folder': 'Select Download Folder'
+        'select_folder': 'Select Download Folder',
+        'select_language': 'Select Language',
+        'language_en': 'English',
+        'language_ru': 'Russian',
+        'btn_start': 'Start Setup',
+        'downloading_tools': 'Downloading essential tools...\nPlease wait.',
+        'installing_ffmpeg': 'Installing full FFmpeg...',
+        'tools_ready': 'Tools installed successfully!'
     },
     'ru': {
         'title': 'YouWizard',
@@ -62,7 +69,14 @@ TRANSLATIONS = {
         'status_error': 'Ошибка',
         'first_run_title': 'Настройка',
         'first_run_msg': 'Загрузка инструментов...',
-        'select_folder': 'Выберите папку для загрузки'
+        'select_folder': 'Выберите папку для загрузки',
+        'select_language': 'Выберите язык',
+        'language_en': 'Английский',
+        'language_ru': 'Русский',
+        'btn_start': 'Начать настройку',
+        'downloading_tools': 'Загрузка инструментов...\nПожалуйста, подождите.',
+        'installing_ffmpeg': 'Установка полной версии FFmpeg...',
+        'tools_ready': 'Инструменты установлены успешно!'
     }
 }
 
@@ -84,31 +98,62 @@ class ToolsInstaller(QThread):
             if not yt_dlp_path.exists():
                 urllib.request.urlretrieve(yt_url, yt_dlp_path)
             
-            # 2. Установка FFmpeg (облегченная версия)
-            self.progress.emit(50, "Downloading ffmpeg-lite...")
+            # 2. Установка полной версии FFmpeg
+            self.progress.emit(30, "Downloading full FFmpeg...")
             if sys.platform == 'win32':
-                # Используем zip с только необходимыми файлами
-                ff_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip"
-                zip_path = INSTALL_DIR / "ffmpeg.zip"
+                # Используем полную версию с всеми компонентами
+                ff_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
+                zip_path = INSTALL_DIR / "ffmpeg_full.zip"
                 
                 try:
                     urllib.request.urlretrieve(ff_url, zip_path)
-                    self.progress.emit(70, "Extracting ffmpeg...")
+                    self.progress.emit(60, "Extracting FFmpeg...")
                     
                     import zipfile
                     with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                        # Извлекаем все файлы из bin директории
                         for file in zip_ref.namelist():
-                            if file.endswith("bin/ffmpeg.exe"):
+                            if file.startswith("ffmpeg-master-latest-win64-gpl/bin/"):
                                 zip_ref.extract(file, INSTALL_DIR)
                                 src = INSTALL_DIR / file
-                                dst = INSTALL_DIR / "ffmpeg.exe"
-                                shutil.move(src, dst)
-                                break
+                                filename = file.split("/")[-1]
+                                dst = INSTALL_DIR / filename
+                                if src != dst:
+                                    shutil.move(src, dst)
+                        
+                        # Очищаем временную директорию
+                        temp_dir = INSTALL_DIR / "ffmpeg-master-latest-win64-gpl"
+                        if temp_dir.exists():
+                            shutil.rmtree(temp_dir)
                     
                     zip_path.unlink()
+                    self.progress.emit(90, "Cleaning up...")
                 except Exception as e:
-                    print(f"FFmpeg download warning: {e}")
-                    # Продолжаем даже если ffmpeg не загрузился
+                    print(f"FFmpeg download error: {e}")
+                    # Пробуем альтернативный источник
+                    try:
+                        ff_url_alt = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
+                        urllib.request.urlretrieve(ff_url_alt, zip_path)
+                        self.progress.emit(60, "Extracting FFmpeg (alternative)...")
+                        
+                        import zipfile
+                        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                            for file in zip_ref.namelist():
+                                if file.startswith("ffmpeg-release-essentials/bin/"):
+                                    zip_ref.extract(file, INSTALL_DIR)
+                                    src = INSTALL_DIR / file
+                                    filename = file.split("/")[-1]
+                                    dst = INSTALL_DIR / filename
+                                    if src != dst:
+                                        shutil.move(src, dst)
+                            
+                            temp_dir = INSTALL_DIR / "ffmpeg-release-essentials"
+                            if temp_dir.exists():
+                                shutil.rmtree(temp_dir)
+                        
+                        zip_path.unlink()
+                    except Exception as e2:
+                        print(f"Alternative FFmpeg download failed: {e2}")
 
             self.progress.emit(100, "Done")
             self.finished.emit(True)
@@ -163,12 +208,125 @@ class Worker(QThread):
         except Exception as e:
             self.finished.emit(False, str(e))
 
-class FirstRunDialog(QDialog):
+class LanguageSelectionDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setMinimumWidth(350)
+        self.selected_language = 'ru'  # По умолчанию русский
+        
+        layout = QVBoxLayout()
+        self.setLayout(layout)
+        
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
+                background-color: #2b2b2b;
+                border-radius: 15px;
+                padding: 25px;
+                color: white;
+            }
+        """)
+        card_layout = QVBoxLayout(card)
+        card_layout.setSpacing(15)
+        
+        title = QLabel("🌍 Select Language / Выберите язык")
+        title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        
+        # Группа кнопок
+        self.lang_group = QButtonGroup(self)
+        
+        # English radio button
+        self.en_radio = QRadioButton("English")
+        self.en_radio.setStyleSheet("""
+            QRadioButton {
+                color: #ffffff;
+                font-size: 14px;
+                spacing: 10px;
+            }
+            QRadioButton::indicator {
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                border: 2px solid #555;
+                background-color: #333;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #bb86fc;
+                border: 2px solid #bb86fc;
+            }
+        """)
+        self.en_radio.setChecked(False)
+        
+        # Russian radio button
+        self.ru_radio = QRadioButton("Русский")
+        self.ru_radio.setStyleSheet("""
+            QRadioButton {
+                color: #ffffff;
+                font-size: 14px;
+                spacing: 10px;
+            }
+            QRadioButton::indicator {
+                width: 20px;
+                height: 20px;
+                border-radius: 10px;
+                border: 2px solid #555;
+                background-color: #333;
+            }
+            QRadioButton::indicator:checked {
+                background-color: #bb86fc;
+                border: 2px solid #bb86fc;
+            }
+        """)
+        self.ru_radio.setChecked(True)
+        
+        self.lang_group.addButton(self.en_radio)
+        self.lang_group.addButton(self.ru_radio)
+        
+        # Кнопка старта
+        self.start_btn = QPushButton("Start Setup / Начать настройку")
+        self.start_btn.setStyleSheet("""
+            QPushButton {
+                background-color: #bb86fc;
+                color: #000;
+                border: none;
+                border-radius: 8px;
+                padding: 12px;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #9965f4;
+            }
+            QPushButton:pressed {
+                background-color: #7c4dff;
+            }
+        """)
+        self.start_btn.clicked.connect(self.accept)
+        
+        card_layout.addWidget(title)
+        card_layout.addWidget(self.en_radio)
+        card_layout.addWidget(self.ru_radio)
+        card_layout.addWidget(self.start_btn)
+        
+        layout.addWidget(card)
+    
+    def get_selected_language(self):
+        if self.en_radio.isChecked():
+            return 'en'
+        return 'ru'
+
+
+class FirstRunDialog(QDialog):
+    def __init__(self, language='ru', parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.setMinimumWidth(300)
+        self.language = language
+        self.t = TRANSLATIONS[self.language]
         
         layout = QVBoxLayout()
         self.setLayout(layout)
@@ -184,11 +342,11 @@ class FirstRunDialog(QDialog):
         """)
         card_layout = QVBoxLayout(card)
         
-        title = QLabel("⚙️ Setup")
+        title = QLabel("⚙️ " + self.t['first_run_title'])
         title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
-        msg = QLabel("Downloading essential tools...\nPlease wait.")
+        msg = QLabel(self.t['downloading_tools'])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
         msg.setStyleSheet("color: #aaaaaa; margin-top: 10px;")
         
@@ -219,11 +377,23 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.settings = self.load_settings()
+        
+        # Сначала показываем выбор языка если это первый запуск
+        if self.settings.get('first_run', True) and 'language' not in self.settings:
+            lang_dialog = LanguageSelectionDialog(self)
+            if lang_dialog.exec() == QDialog.DialogCode.Accepted:
+                selected_lang = lang_dialog.get_selected_language()
+                self.settings['language'] = selected_lang
+                self.save_settings()
+        
         self.lang = self.settings.get('language', 'ru')
         self.t = TRANSLATIONS[self.lang]
         
         self.init_ui()
-        self.check_tools()
+        # Не вызываем check_tools() сразу - вызовем после показа окна
+        
+        # Флаг для отслеживания состояния
+        self.tools_check_started = False
 
     def load_settings(self):
         if SETTINGS_FILE.exists():
@@ -234,6 +404,13 @@ class MainWindow(QMainWindow):
     def save_settings(self):
         with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
             json.dump(self.settings, f)
+
+    def showEvent(self, event):
+        # Вызываем проверку инструментов только после первого показа окна
+        super().showEvent(event)
+        if not self.tools_check_started:
+            self.tools_check_started = True
+            self.check_tools()
 
     def init_ui(self):
         self.setWindowTitle(self.t['title'])
@@ -353,7 +530,8 @@ class MainWindow(QMainWindow):
 
     def check_tools(self):
         if self.settings.get('first_run', True):
-            self.install_dialog = FirstRunDialog(self)
+            # Передаем выбранный язык в диалог установки
+            self.install_dialog = FirstRunDialog(self.lang, self)
             self.install_dialog.show()
             
             self.installer = ToolsInstaller()
@@ -371,7 +549,9 @@ class MainWindow(QMainWindow):
         if success:
             self.settings['first_run'] = False
             self.save_settings()
-            self.status_label.setText("✅ Ready")
+            # Обновляем переводы после установки
+            self.t = TRANSLATIONS[self.lang]
+            self.status_label.setText("✅ " + self.t['tools_ready'])
         else:
             QMessageBox.critical(self, "Error", "Failed to install tools. Check internet connection.")
 
