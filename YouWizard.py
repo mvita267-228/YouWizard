@@ -385,15 +385,19 @@ class MainWindow(QMainWindow):
                 selected_lang = lang_dialog.get_selected_language()
                 self.settings['language'] = selected_lang
                 self.save_settings()
+            else:
+                # Если пользователь закрыл диалог, используем язык по умолчанию
+                self.settings['language'] = 'ru'
+                self.save_settings()
         
         self.lang = self.settings.get('language', 'ru')
         self.t = TRANSLATIONS[self.lang]
         
+        # Флаг для отслеживания состояния - устанавливаем ДО init_ui
+        self.tools_check_started = False
+        
         self.init_ui()
         # Не вызываем check_tools() сразу - вызовем после показа окна
-        
-        # Флаг для отслеживания состояния
-        self.tools_check_started = False
 
     def load_settings(self):
         if SETTINGS_FILE.exists():
