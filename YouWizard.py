@@ -29,7 +29,7 @@ except ImportError:
 
 # Конфигурация
 APP_NAME = "YouWizard"
-SETTINGS_FILE = "settings.json"
+SETTINGS_FILE = Path("settings.json")
 INSTALL_DIR = Path("bin")
 
 # Словарь переводов
