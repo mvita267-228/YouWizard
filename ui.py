@@ -1,36 +1,23 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-YouWizard - Minimalist YouTube Downloader (PyQt6)
+YouWizard - UI Module
+Contains all UI components: dialogs, main window, and custom widgets.
 """
 
 import sys
-import os
-import json
-import subprocess
-import shutil
 from pathlib import Path
-
-# Скрытие консольного окна (для Windows)
-if sys.platform == 'win32':
-    import ctypes
-    ctypes.windll.user32.ShowWindow(ctypes.windll.kernel32.GetConsoleWindow(), 0)
 
 try:
     from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                  QHBoxLayout, QLineEdit, QPushButton, QLabel, 
                                  QComboBox, QProgressBar, QMessageBox, QFileDialog,
                                  QDialog, QFrame, QRadioButton, QButtonGroup)
-    from PyQt6.QtCore import Qt, QThread, pyqtSignal
+    from PyQt6.QtCore import Qt
     from PyQt6.QtGui import QFont
 except ImportError:
     print("Ошибка: PyQt6 не установлен. Установите его командой: pip install PyQt6")
     sys.exit(1)
-
-# Конфигурация
-APP_NAME = "YouWizard"
-SETTINGS_FILE = Path("settings.json")
-INSTALL_DIR = Path("bin")
 
 # Словарь переводов
 TRANSLATIONS = {
@@ -80,135 +67,9 @@ TRANSLATIONS = {
     }
 }
 
-class ToolsInstaller(QThread):
-    progress = pyqtSignal(int, str)
-    finished = pyqtSignal(bool)
-
-    def run(self):
-        try:
-            INSTALL_DIR.mkdir(exist_ok=True)
-            
-            # 1. Установка yt-dlp
-            self.progress.emit(10, "Downloading yt-dlp...")
-            yt_dlp_path = INSTALL_DIR / ("yt-dlp.exe" if sys.platform == 'win32' else "yt-dlp")
-            
-            import urllib.request
-            yt_url = "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe" if sys.platform == 'win32' else "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp"
-            
-            if not yt_dlp_path.exists():
-                urllib.request.urlretrieve(yt_url, yt_dlp_path)
-            
-            # 2. Установка полной версии FFmpeg
-            self.progress.emit(30, "Downloading full FFmpeg...")
-            if sys.platform == 'win32':
-                # Используем полную версию с всеми компонентами
-                ff_url = "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-                zip_path = INSTALL_DIR / "ffmpeg_full.zip"
-                
-                try:
-                    urllib.request.urlretrieve(ff_url, zip_path)
-                    self.progress.emit(60, "Extracting FFmpeg...")
-                    
-                    import zipfile
-                    with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                        # Извлекаем все файлы из bin директории
-                        for file in zip_ref.namelist():
-                            if file.startswith("ffmpeg-master-latest-win64-gpl/bin/"):
-                                zip_ref.extract(file, INSTALL_DIR)
-                                src = INSTALL_DIR / file
-                                filename = file.split("/")[-1]
-                                dst = INSTALL_DIR / filename
-                                if src != dst:
-                                    shutil.move(src, dst)
-                        
-                        # Очищаем временную директорию
-                        temp_dir = INSTALL_DIR / "ffmpeg-master-latest-win64-gpl"
-                        if temp_dir.exists():
-                            shutil.rmtree(temp_dir)
-                    
-                    zip_path.unlink()
-                    self.progress.emit(90, "Cleaning up...")
-                except Exception as e:
-                    print(f"FFmpeg download error: {e}")
-                    # Пробуем альтернативный источник
-                    try:
-                        ff_url_alt = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"
-                        urllib.request.urlretrieve(ff_url_alt, zip_path)
-                        self.progress.emit(60, "Extracting FFmpeg (alternative)...")
-                        
-                        import zipfile
-                        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                            for file in zip_ref.namelist():
-                                if file.startswith("ffmpeg-release-essentials/bin/"):
-                                    zip_ref.extract(file, INSTALL_DIR)
-                                    src = INSTALL_DIR / file
-                                    filename = file.split("/")[-1]
-                                    dst = INSTALL_DIR / filename
-                                    if src != dst:
-                                        shutil.move(src, dst)
-                            
-                            temp_dir = INSTALL_DIR / "ffmpeg-release-essentials"
-                            if temp_dir.exists():
-                                shutil.rmtree(temp_dir)
-                        
-                        zip_path.unlink()
-                    except Exception as e2:
-                        print(f"Alternative FFmpeg download failed: {e2}")
-
-            self.progress.emit(100, "Done")
-            self.finished.emit(True)
-        except Exception as e:
-            print(f"Install error: {e}")
-            self.finished.emit(False)
-
-class Worker(QThread):
-    progress = pyqtSignal(str)
-    finished = pyqtSignal(bool, str)
-    
-    def __init__(self, url, output_template, format_type, bin_path):
-        super().__init__()
-        self.url = url
-        self.output_template = output_template
-        self.format_type = format_type
-        self.bin_path = str(bin_path)
-
-    def run(self):
-        try:
-            cmd = [
-                os.path.join(self.bin_path, "yt-dlp.exe" if sys.platform == 'win32' else "yt-dlp"),
-                '--ffmpeg-location', os.path.join(self.bin_path, "ffmpeg.exe" if sys.platform == 'win32' else "ffmpeg"),
-                '-o', self.output_template,
-                '--no-warnings',
-                '--newline'
-            ]
-
-            if self.format_type == 'audio':
-                cmd.extend(['-x', '--audio-format', 'mp3', '--audio-quality', '0'])
-            else:
-                cmd.extend(['-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'])
-
-            process = subprocess.Popen(
-                cmd + [self.url],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
-                universal_newlines=True,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == 'win32' else 0
-            )
-
-            for line in process.stdout:
-                if '[download]' in line or 'Destination' in line:
-                    self.progress.emit(line.strip())
-            
-            process.wait()
-            if process.returncode == 0:
-                self.finished.emit(True, "Success")
-            else:
-                self.finished.emit(False, "Error occurred")
-                
-        except Exception as e:
-            self.finished.emit(False, str(e))
 
 class LanguageSelectionDialog(QDialog):
+    """Диалог выбора языка при первом запуске."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
@@ -320,6 +181,7 @@ class LanguageSelectionDialog(QDialog):
 
 
 class FirstRunDialog(QDialog):
+    """Диалог первого запуска с прогрессом установки."""
     def __init__(self, language='ru', parent=None):
         super().__init__(parent)
         # Делаем диалог модальным окном с обычными рамками
@@ -372,15 +234,19 @@ class FirstRunDialog(QDialog):
         self.bar.setValue(val)
         self.status_text.setText(text)
 
+
 class MainWindow(QMainWindow):
-    def __init__(self, language='ru'):
+    """Главное окно приложения."""
+    def __init__(self, language='ru', logic_module=None):
         super().__init__()
-        self.settings = self.load_settings()
+        self.logic = logic_module
+        self.settings = self.logic.load_settings(Path("settings.json")) if self.logic else {'first_run': True, 'language': 'ru', 'last_dir': str(Path.home())}
         
         # Используем переданный язык или сохраняем из настроек
         if 'language' not in self.settings:
             self.settings['language'] = language
-            self.save_settings()
+            if self.logic:
+                self.logic.save_settings(Path("settings.json"), self.settings)
         
         self.lang = self.settings.get('language', 'ru')
         self.t = TRANSLATIONS[self.lang]
@@ -390,16 +256,6 @@ class MainWindow(QMainWindow):
         
         self.init_ui()
         # Не вызываем check_tools() сразу - вызовем после показа окна
-
-    def load_settings(self):
-        if SETTINGS_FILE.exists():
-            with open(SETTINGS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        return {'first_run': True, 'language': 'ru', 'last_dir': str(Path.home())}
-
-    def save_settings(self):
-        with open(SETTINGS_FILE, 'w', encoding='utf-8') as f:
-            json.dump(self.settings, f)
 
     def showEvent(self, event):
         # Вызываем проверку инструментов только после первого показа окна
@@ -612,7 +468,7 @@ class MainWindow(QMainWindow):
             self.install_dialog = FirstRunDialog(self.lang, self)
             self.install_dialog.show()
             
-            self.installer = ToolsInstaller()
+            self.installer = self.logic.ToolsInstaller()
             self.installer.progress.connect(lambda v, t: self.install_dialog.set_progress(v, t))
             self.installer.finished.connect(self.on_install_finished)
             self.installer.start()
@@ -620,16 +476,18 @@ class MainWindow(QMainWindow):
             # Закрываем главное окно пока идет установка (чтобы не было двух окон)
             self.hide()
         else:
-            if not (INSTALL_DIR / "yt-dlp.exe").exists():
+            if not (self.logic.INSTALL_DIR / "yt-dlp.exe").exists():
                  self.settings['first_run'] = True
-                 self.save_settings()
+                 if self.logic:
+                     self.logic.save_settings(Path("settings.json"), self.settings)
                  self.check_tools()
 
     def on_install_finished(self, success):
         self.install_dialog.close()
         if success:
             self.settings['first_run'] = False
-            self.save_settings()
+            if self.logic:
+                self.logic.save_settings(Path("settings.json"), self.settings)
             # Обновляем переводы после установки
             self.t = TRANSLATIONS[self.lang]
             self.status_label.setText("✅ " + self.t['tools_ready'])
@@ -647,7 +505,8 @@ class MainWindow(QMainWindow):
         folder = QFileDialog.getExistingDirectory(self, self.t['select_folder'], self.settings.get('last_dir', ''))
         if folder:
             self.settings['last_dir'] = folder
-            self.save_settings()
+            if self.logic:
+                self.logic.save_settings(Path("settings.json"), self.settings)
 
     def start_download(self):
         url = self.url_input.text().strip()
@@ -662,7 +521,7 @@ class MainWindow(QMainWindow):
         fmt = 'audio' if self.format_combo.currentIndex() == 1 else 'video'
         out_template = os.path.join(self.settings.get('last_dir', '.'), '%(title)s.%(ext)s')
         
-        self.worker = Worker(url, out_template, fmt, INSTALL_DIR)
+        self.worker = self.logic.Worker(url, out_template, fmt, self.logic.INSTALL_DIR)
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_download_finished)
         self.worker.start()
@@ -683,22 +542,3 @@ class MainWindow(QMainWindow):
             self.progress_bar.setValue(100)
         else:
             self.status_label.setText(f"{self.t['status_error']}: {msg}")
-
-if __name__ == '__main__':
-    app = QApplication(sys.argv)
-    font = QFont("Segoe UI", 10)
-    app.setFont(font)
-    
-    # Проверяем, нужен ли выбор языка (первый запуск)
-    settings_file = Path("settings.json")
-    language = 'ru'  # язык по умолчанию
-    
-    if not settings_file.exists():
-        # Показываем диалог выбора языка перед созданием главного окна
-        lang_dialog = LanguageSelectionDialog()
-        if lang_dialog.exec() == QDialog.DialogCode.Accepted:
-            language = lang_dialog.get_selected_language()
-    
-    window = MainWindow(language)
-    window.show()
-    sys.exit(app.exec())
