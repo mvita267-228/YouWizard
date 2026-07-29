@@ -322,25 +322,19 @@ class LanguageSelectionDialog(QDialog):
 class FirstRunDialog(QDialog):
     def __init__(self, language='ru', parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setMinimumWidth(300)
+        # Делаем диалог модальным окном с обычными рамками
+        self.setWindowFlags(Qt.WindowType.Dialog | Qt.WindowType.WindowTitleHint)
+        self.setModal(True)
+        self.setMinimumWidth(350)
+        self.setMinimumHeight(200)
         self.language = language
         self.t = TRANSLATIONS[self.language]
+        self.setWindowTitle(self.t['first_run_title'])
         
         layout = QVBoxLayout()
         self.setLayout(layout)
-        
-        card = QFrame()
-        card.setStyleSheet("""
-            QFrame {
-                background-color: #2b2b2b;
-                border-radius: 15px;
-                padding: 20px;
-                color: white;
-            }
-        """)
-        card_layout = QVBoxLayout(card)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         
         title = QLabel("⚙️ " + self.t['first_run_title'])
         title.setFont(QFont("Segoe UI", 14, QFont.Weight.Bold))
@@ -348,30 +342,35 @@ class FirstRunDialog(QDialog):
         
         msg = QLabel(self.t['downloading_tools'])
         msg.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        msg.setStyleSheet("color: #aaaaaa; margin-top: 10px;")
+        msg.setWordWrap(True)
+        msg.setStyleSheet("color: #aaaaaa; margin-top: 10px; font-size: 13px;")
         
         self.bar = QProgressBar()
         self.bar.setTextVisible(False)
-        self.bar.setFixedHeight(6)
+        self.bar.setFixedHeight(8)
         self.bar.setStyleSheet("""
             QProgressBar {
                 background-color: #444;
-                border-radius: 3px;
+                border-radius: 4px;
             }
             QProgressBar::chunk {
                 background-color: #bb86fc;
-                border-radius: 3px;
+                border-radius: 4px;
             }
         """)
         
-        card_layout.addWidget(title)
-        card_layout.addWidget(msg)
-        card_layout.addWidget(self.bar)
+        self.status_text = QLabel("")
+        self.status_text.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.status_text.setStyleSheet("color: #888; font-size: 11px;")
         
-        layout.addWidget(card)
+        layout.addWidget(title)
+        layout.addWidget(msg)
+        layout.addWidget(self.bar)
+        layout.addWidget(self.status_text)
         
     def set_progress(self, val, text):
         self.bar.setValue(val)
+        self.status_text.setText(text)
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -534,7 +533,7 @@ class MainWindow(QMainWindow):
 
     def check_tools(self):
         if self.settings.get('first_run', True):
-            # Передаем выбранный язык в диалог установки
+            # Передаем выбранный язык в диалог установки и показываем модально
             self.install_dialog = FirstRunDialog(self.lang, self)
             self.install_dialog.show()
             
@@ -542,6 +541,9 @@ class MainWindow(QMainWindow):
             self.installer.progress.connect(lambda v, t: self.install_dialog.set_progress(v, t))
             self.installer.finished.connect(self.on_install_finished)
             self.installer.start()
+            
+            # Закрываем главное окно пока идет установка (чтобы не было двух окон)
+            self.hide()
         else:
             if not (INSTALL_DIR / "yt-dlp.exe").exists():
                  self.settings['first_run'] = True
@@ -556,7 +558,14 @@ class MainWindow(QMainWindow):
             # Обновляем переводы после установки
             self.t = TRANSLATIONS[self.lang]
             self.status_label.setText("✅ " + self.t['tools_ready'])
+            # Показываем главное окно после успешной установки
+            self.show()
+            self.raise_()
+            self.activateWindow()
         else:
+            self.show()
+            self.raise_()
+            self.activateWindow()
             QMessageBox.critical(self, "Error", "Failed to install tools. Check internet connection.")
 
     def browse_folder(self):
