@@ -416,6 +416,9 @@ class MainWindow(QMainWindow):
         # Убираем стандартную рамку окна для кастомного заголовка
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         
+        # Переменные для перетаскивания окна
+        self._drag_pos = None
+        
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #121212;
@@ -583,6 +586,25 @@ class MainWindow(QMainWindow):
         content_layout.addStretch()
         
         main_layout.addWidget(content_widget, 1)
+
+    # Методы для перетаскивания окна
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton and self.title_label.underMouse():
+            self._drag_pos = event.globalPosition().toPoint() - self.frameGeometry().topLeft()
+            event.accept()
+        else:
+            super().mousePressEvent(event)
+
+    def mouseMoveEvent(self, event):
+        if self._drag_pos is not None and event.buttons() & Qt.MouseButton.LeftButton:
+            self.move(event.globalPosition().toPoint() - self._drag_pos)
+            event.accept()
+        else:
+            super().mouseMoveEvent(event)
+
+    def mouseReleaseEvent(self, event):
+        self._drag_pos = None
+        super().mouseReleaseEvent(event)
 
     def check_tools(self):
         if self.settings.get('first_run', True):
