@@ -373,21 +373,14 @@ class FirstRunDialog(QDialog):
         self.status_text.setText(text)
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, language='ru'):
         super().__init__()
         self.settings = self.load_settings()
         
-        # Сначала показываем выбор языка если это первый запуск
-        if self.settings.get('first_run', True) and 'language' not in self.settings:
-            lang_dialog = LanguageSelectionDialog(self)
-            if lang_dialog.exec() == QDialog.DialogCode.Accepted:
-                selected_lang = lang_dialog.get_selected_language()
-                self.settings['language'] = selected_lang
-                self.save_settings()
-            else:
-                # Если пользователь закрыл диалог, используем язык по умолчанию
-                self.settings['language'] = 'ru'
-                self.save_settings()
+        # Используем переданный язык или сохраняем из настроек
+        if 'language' not in self.settings:
+            self.settings['language'] = language
+            self.save_settings()
         
         self.lang = self.settings.get('language', 'ru')
         self.t = TRANSLATIONS[self.lang]
@@ -420,6 +413,9 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(450, 250)
         self.setMaximumSize(600, 400)
         
+        # Убираем стандартную рамку окна для кастомного заголовка
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        
         self.setStyleSheet("""
             QMainWindow {
                 background-color: #121212;
@@ -428,6 +424,27 @@ class MainWindow(QMainWindow):
                 background-color: #121212;
                 color: #ffffff;
                 font-family: 'Segoe UI', sans-serif;
+            }
+            /* Стили для кастомного заголовка */
+            #title_bar {
+                background-color: #1f1f1f;
+                padding: 8px;
+            }
+            #title_label {
+                color: #bb86fc;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            #close_btn {
+                background-color: transparent;
+                border: none;
+                color: #888;
+                font-size: 18px;
+                padding: 5px 10px;
+            }
+            #close_btn:hover {
+                background-color: #cf6679;
+                color: white;
             }
             QLineEdit {
                 background-color: #1e1e1e;
@@ -488,20 +505,51 @@ class MainWindow(QMainWindow):
             }
         """)
 
+        # Создаем центральный виджет с вертикальным layout
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        layout = QVBoxLayout(central_widget)
-        layout.setContentsMargins(30, 30, 30, 30)
-        layout.setSpacing(20)
-
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # Создаем кастомную заголовочную панель
+        title_bar = QWidget()
+        title_bar.setObjectName("title_bar")
+        title_bar.setFixedHeight(40)
+        title_layout = QHBoxLayout(title_bar)
+        title_layout.setContentsMargins(10, 0, 10, 0)
+        
+        # Заголовок окна
+        self.title_label = QLabel("🎬 YouWizard")
+        self.title_label.setObjectName("title_label")
+        title_layout.addWidget(self.title_label)
+        
+        # Пружина для прижатия кнопки вправо
+        title_layout.addStretch()
+        
+        # Кнопка закрытия
+        self.close_btn = QPushButton("✕")
+        self.close_btn.setObjectName("close_btn")
+        self.close_btn.setFixedSize(30, 30)
+        self.close_btn.clicked.connect(self.close)
+        title_layout.addWidget(self.close_btn)
+        
+        main_layout.addWidget(title_bar)
+        
+        # Основной контент
+        content_widget = QWidget()
+        content_layout = QVBoxLayout(content_widget)
+        content_layout.setContentsMargins(30, 30, 30, 30)
+        content_layout.setSpacing(20)
+        
         header = QLabel("🎬 YouWizard")
         header.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
         header.setStyleSheet("color: #bb86fc; margin-bottom: 10px;")
-        layout.addWidget(header)
+        content_layout.addWidget(header)
 
         self.url_input = QLineEdit()
         self.url_input.setPlaceholderText(self.t['url_placeholder'])
-        layout.addWidget(self.url_input)
+        content_layout.addWidget(self.url_input)
 
         settings_layout = QHBoxLayout()
         settings_layout.setSpacing(15)
@@ -516,20 +564,25 @@ class MainWindow(QMainWindow):
         self.browse_btn.clicked.connect(self.browse_folder)
         settings_layout.addWidget(self.browse_btn)
         
-        layout.addLayout(settings_layout)
+        content_layout.addLayout(settings_layout)
 
         self.download_btn = QPushButton(f"📥 {self.t['btn_download']}")
         self.download_btn.setFixedHeight(50)
         self.download_btn.clicked.connect(self.start_download)
-        layout.addWidget(self.download_btn)
+        content_layout.addWidget(self.download_btn)
 
         self.status_label = QLabel(self.t['status_ready'])
         self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(self.status_label)
+        content_layout.addWidget(self.status_label)
 
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        layout.addWidget(self.progress_bar)
+        content_layout.addWidget(self.progress_bar)
+        
+        # Добавляем spacer для прижатия контента вверх
+        content_layout.addStretch()
+        
+        main_layout.addWidget(content_widget, 1)
 
     def check_tools(self):
         if self.settings.get('first_run', True):
@@ -614,6 +667,16 @@ if __name__ == '__main__':
     font = QFont("Segoe UI", 10)
     app.setFont(font)
     
-    window = MainWindow()
+    # Проверяем, нужен ли выбор языка (первый запуск)
+    settings_file = Path("settings.json")
+    language = 'ru'  # язык по умолчанию
+    
+    if not settings_file.exists():
+        # Показываем диалог выбора языка перед созданием главного окна
+        lang_dialog = LanguageSelectionDialog()
+        if lang_dialog.exec() == QDialog.DialogCode.Accepted:
+            language = lang_dialog.get_selected_language()
+    
+    window = MainWindow(language)
     window.show()
     sys.exit(app.exec())
