@@ -110,12 +110,13 @@ class Worker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(bool, str)
     
-    def __init__(self, url, output_template, format_type, bin_path):
+    def __init__(self, url, output_template, format_type, bin_path, quality='best'):
         super().__init__()
         self.url = url
         self.output_template = output_template
         self.format_type = format_type
         self.bin_path = str(bin_path)
+        self.quality = quality
 
     def run(self):
         try:
@@ -130,7 +131,13 @@ class Worker(QThread):
             if self.format_type == 'audio':
                 cmd.extend(['-x', '--audio-format', 'mp3', '--audio-quality', '0'])
             else:
-                cmd.extend(['-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'])
+                # Выбор качества для видео
+                if self.quality == 'best':
+                    cmd.extend(['-f', 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best'])
+                else:
+                    # Формируем фильтр качества на основе выбора пользователя
+                    height = self.quality
+                    cmd.extend(['-f', f'bestvideo[height<={height}][ext=mp4]+bestaudio[ext=m4a]/best[height<={height}][ext=mp4]/best[height<={height}]'])
 
             process = subprocess.Popen(
                 cmd + [self.url],

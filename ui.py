@@ -6,6 +6,7 @@ Contains all UI components: dialogs, main window, and custom widgets.
 """
 
 import sys
+import os
 from pathlib import Path
 
 try:
@@ -41,7 +42,13 @@ TRANSLATIONS = {
         'btn_start': 'Start Setup',
         'downloading_tools': 'Downloading essential tools...\nPlease wait.',
         'installing_ffmpeg': 'Installing full FFmpeg...',
-        'tools_ready': 'Tools installed successfully!'
+        'tools_ready': 'Tools installed successfully!',
+        'quality_label': 'Quality:',
+        'quality_best': 'Best',
+        'quality_1080': '1080p',
+        'quality_720': '720p',
+        'quality_480': '480p',
+        'quality_360': '360p'
     },
     'ru': {
         'title': 'YouWizard',
@@ -63,7 +70,13 @@ TRANSLATIONS = {
         'btn_start': 'Начать настройку',
         'downloading_tools': 'Загрузка инструментов...\nПожалуйста, подождите.',
         'installing_ffmpeg': 'Установка полной версии FFmpeg...',
-        'tools_ready': 'Инструменты установлены успешно!'
+        'tools_ready': 'Инструменты установлены успешно!',
+        'quality_label': 'Качество:',
+        'quality_best': 'Лучшее',
+        'quality_1080': '1080p',
+        'quality_720': '720p',
+        'quality_480': '480p',
+        'quality_360': '360p'
     }
 }
 
@@ -418,6 +431,16 @@ class MainWindow(QMainWindow):
         self.format_combo.setCurrentIndex(0)
         settings_layout.addWidget(self.format_combo, 2)
         
+        # Выбор качества (только для видео)
+        self.quality_combo = QComboBox()
+        self.quality_combo.addItem(self.t['quality_best'], 'best')
+        self.quality_combo.addItem(self.t['quality_1080'], '1080')
+        self.quality_combo.addItem(self.t['quality_720'], '720')
+        self.quality_combo.addItem(self.t['quality_480'], '480')
+        self.quality_combo.addItem(self.t['quality_360'], '360')
+        self.quality_combo.setVisible(True)
+        settings_layout.addWidget(self.quality_combo, 2)
+        
         self.browse_btn = QPushButton(self.t['btn_browse'])
         self.browse_btn.setFixedWidth(50)
         self.browse_btn.clicked.connect(self.browse_folder)
@@ -519,9 +542,10 @@ class MainWindow(QMainWindow):
         self.status_label.setText(self.t['status_downloading'])
         
         fmt = 'audio' if self.format_combo.currentIndex() == 1 else 'video'
+        quality = self.quality_combo.currentData() if fmt == 'video' else 'best'
         out_template = os.path.join(self.settings.get('last_dir', '.'), '%(title)s.%(ext)s')
         
-        self.worker = self.logic.Worker(url, out_template, fmt, self.logic.INSTALL_DIR)
+        self.worker = self.logic.Worker(url, out_template, fmt, self.logic.INSTALL_DIR, quality=quality)
         self.worker.progress.connect(self.update_progress)
         self.worker.finished.connect(self.on_download_finished)
         self.worker.start()
