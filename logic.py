@@ -166,7 +166,11 @@ def load_settings(settings_file):
     if settings_file.exists():
         with open(settings_file, 'r', encoding='utf-8') as f:
             return json.load(f)
-    return {'first_run': True, 'language': 'ru', 'last_dir': str(Path.home())}
+    # По умолчанию используем папку Загрузки
+    default_downloads = Path.home() / "Downloads" if sys.platform != 'win32' else Path.home() / "Downloads"
+    if not default_downloads.exists():
+        default_downloads = Path.home()
+    return {'first_run': True, 'language': 'ru', 'last_dir': str(default_downloads)}
 
 
 def save_settings(settings_file, settings):

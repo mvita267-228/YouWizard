@@ -14,8 +14,8 @@ try:
                                  QHBoxLayout, QLineEdit, QPushButton, QLabel, 
                                  QComboBox, QProgressBar, QMessageBox, QFileDialog,
                                  QDialog, QFrame, QRadioButton, QButtonGroup)
-    from PyQt6.QtCore import Qt
-    from PyQt6.QtGui import QFont
+    from PyQt6.QtCore import Qt, QPoint
+    from PyQt6.QtGui import QFont, QCursor
 except ImportError:
     print("Ошибка: PyQt6 не установлен. Установите его командой: pip install PyQt6")
     sys.exit(1)
@@ -287,6 +287,7 @@ class MainWindow(QMainWindow):
         
         # Переменные для перетаскивания окна
         self._drag_pos = None
+        self._is_maximized = False
         
         self.setStyleSheet("""
             QMainWindow {
@@ -307,7 +308,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
                 font-size: 14px;
             }
-            #close_btn {
+            #close_btn, #minimize_btn, #maximize_btn {
                 background-color: transparent;
                 border: none;
                 color: #888;
@@ -316,6 +317,10 @@ class MainWindow(QMainWindow):
             }
             #close_btn:hover {
                 background-color: #cf6679;
+                color: white;
+            }
+            #minimize_btn:hover, #maximize_btn:hover {
+                background-color: #333;
                 color: white;
             }
             QLineEdit {
@@ -396,8 +401,22 @@ class MainWindow(QMainWindow):
         self.title_label.setObjectName("title_label")
         title_layout.addWidget(self.title_label)
         
-        # Пружина для прижатия кнопки вправо
+        # Пружина для прижатия кнопок вправо
         title_layout.addStretch()
+        
+        # Кнопка свернуть
+        self.minimize_btn = QPushButton("─")
+        self.minimize_btn.setObjectName("minimize_btn")
+        self.minimize_btn.setFixedSize(30, 30)
+        self.minimize_btn.clicked.connect(self.showMinimized)
+        title_layout.addWidget(self.minimize_btn)
+        
+        # Кнопка развернуть/восстановить
+        self.maximize_btn = QPushButton("□")
+        self.maximize_btn.setObjectName("maximize_btn")
+        self.maximize_btn.setFixedSize(30, 30)
+        self.maximize_btn.clicked.connect(self.toggle_maximize)
+        title_layout.addWidget(self.maximize_btn)
         
         # Кнопка закрытия
         self.close_btn = QPushButton("✕")
@@ -484,6 +503,17 @@ class MainWindow(QMainWindow):
     def mouseReleaseEvent(self, event):
         self._drag_pos = None
         super().mouseReleaseEvent(event)
+
+    def toggle_maximize(self):
+        """Переключение между обычным режимом и полным экраном."""
+        if self._is_maximized:
+            self.showNormal()
+            self.maximize_btn.setText("□")
+            self._is_maximized = False
+        else:
+            self.showMaximized()
+            self.maximize_btn.setText("❐")
+            self._is_maximized = True
 
     def check_tools(self):
         if self.settings.get('first_run', True):
