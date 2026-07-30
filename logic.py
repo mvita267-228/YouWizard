@@ -62,7 +62,6 @@ class DownloadWorker:
             if self._stop_flag:
                 return
 
-            # Настройка параметров yt-dlp
             ydl_opts = {
                 'outtmpl': os.path.join(self.output_path, '%(title)s.%(ext)s'),
                 'quiet': True,
@@ -77,7 +76,6 @@ class DownloadWorker:
                     'preferredquality': '192',
                 }]
             else:
-                # Видео с выбором качества
                 if self.quality == 'best':
                     ydl_opts['format'] = 'bestvideo+bestaudio/best'
                 elif self.quality == '1080':
@@ -122,10 +120,6 @@ def check_and_install_tools(callback, language='ru'):
     """Проверяет и устанавливает необходимые инструменты."""
     t = LOGIC_TRANSLATIONS.get(language, LOGIC_TRANSLATIONS['ru'])
     
-    # В tkinter версии мы предполагаем, что пользователь установил зависимости через pip
-    # yt-dlp уже импортирован выше
-    # FFmpeg проверяем наличие
-    
     ffmpeg_found = False
     try:
         result = subprocess.run(['ffmpeg', '-version'], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -135,11 +129,8 @@ def check_and_install_tools(callback, language='ru'):
 
     if not ffmpeg_found:
         callback('status', t['installing_ffmpeg'])
-        # Попытка установить ffmpeg через package manager или сообщить пользователю
-        # Для простоты в этой версии просто сообщаем о необходимости установки
         time.sleep(1)
         callback('status', "FFmpeg not found. Please install FFmpeg manually.")
-        # В реальной версии можно скачать бинарник
     else:
         callback('status', t['tools_ready'])
     
@@ -169,9 +160,9 @@ def save_settings(path, settings):
 def get_default_download_folder():
     """Возвращает путь к папке загрузок по умолчанию."""
     home = Path.home()
-    if os.name == 'nt':  # Windows
+    if os.name == 'nt':
         downloads = home / 'Downloads'
-    else:  # Linux/Mac
+    else:
         downloads = home / 'Downloads'
         if not downloads.exists():
             downloads = home
