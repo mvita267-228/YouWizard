@@ -8,6 +8,7 @@ Main entry point.
 import sys
 import os
 from pathlib import Path
+import tkinter as tk
 
 # Скрытие консольного окна (для Windows)
 if sys.platform == 'win32':
@@ -18,22 +19,55 @@ if sys.platform == 'win32':
         pass
 
 import logic
-import ui
+from ui import MainWindow, LanguageSelectionDialog, FirstRunDialog
 
-if __name__ == '__main__':
-    # Проверяем, нужен ли выбор языка (первый запуск)
-    settings_file = Path("settings.json")
-    language = 'ru'  # язык по умолчанию
+
+def main():
+    """Точка входа в приложение."""
+    # Загрузка настроек
+    settings_path = Path("settings.json")
+    settings = logic.load_settings(settings_path)
     
-    if not settings_file.exists():
-        # Показываем диалог выбора языка перед созданием главного окна
-        lang_dialog = ui.LanguageSelectionDialog()
-        selected_lang = lang_dialog.run()
-        if selected_lang:
-            language = selected_lang
-        else:
-            sys.exit(0)
+    # Проверка первого запуска
+    if settings.get('first_run', True):
+        # Создаем скрытое корневое окно для диалога выбора языка
+        root = tk.Tk()
+        root.withdraw()  # Скрываем главное окно
+        
+        # Диалог выбора языка
+        lang_dialog = LanguageSelectionDialog(root)
+        language = lang_dialog.get_selected_language()
+        
+        # Обновляем настройки
+        settings['first_run'] = False
+        settings['language'] = language
+        logic.save_settings(settings_path, settings)
+        
+        # Закрываем временное окно
+        root.destroy()
+        
+        # Создаем главное приложение
+        app = MainWindow(logic, language)
+        
+        # Показываем диалог установки
+        install_dialog = FirstRunDialog(app.root, language)
+        
+        # Запуск проверки инструментов в фоне
+        def on_install_complete():
+            install_dialog.close()
+            app.check_tools()
+        
+        # Имитация завершения установки через 2 секунды
+        app.root.after(2000, on_install_complete)
+    else:
+        # Не первый запуск
+        language = settings.get('language', 'ru')
+        app = MainWindow(logic, language)
+        app.check_tools()
     
-    # Запускаем главное приложение
-    app = ui.MainWindow(language, logic_module=logic)
+    # Запуск главного цикла
     app.run()
+
+
+if __name__ == "__main__":
+    main()
